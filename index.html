@@ -2247,31 +2247,32 @@ else window.LEVEL = LEVEL;
     for (const r of (lv.def.carpets || [])) carpet(g, r[0], r[1], r[2] + 1 - r[0], r[3] + 1 - r[1]);
     // Weiche Schatten von Wänden und Möbeln (eine Maske, weichgezeichnet)
     softShadows(g, lv, pxPerTile);
-    // Wände
-    for (let y = 0; y < lv.H; y++) for (let x = 0; x < lv.W; x++) {
-      const k = K(x, y);
-      if (!isWallish(k)) continue;
-      let building = false;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (interior(K(x + dx, y + dy))) building = true;
-      wall(g, lv, x, y, building, P, rng(hash(x, y, 2)));
+    // 2,5D: Reihe für Reihe von hinten (oben) nach vorn. Wände und Möbel haben Höhe: Die Oberseite ist um ihre Höhe nach oben
+    // versetzt und verdeckt, was dahinter steht, darunter sieht man die Vorderseite.
+    for (let y = 0; y < lv.H; y++) {
+      for (let x = 0; x < lv.W; x++) {
+        const k = K(x, y);
+        if (!isWallish(k) && k !== 'window') continue;
+        let building = false;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (interior(K(x + dx, y + dy))) building = true;
+        wall(g, lv, x, y, building, P, rng(hash(x, y, 2)));
+        if (k === 'vent') vent(g, lv, x, y, P);
+        if (k === 'window') windowTile(g, lv, x, y, P);
+      }
+      for (let x = 0; x < lv.W; x++) {
+        const k = K(x, y), r = rng(hash(x, y, 3));
+        if (k === 'statue') raised(g, x, y, LIFT.statue, '#3a352f', () => statue(g, x, y, P));
+        else if (k === 'crate') raised(g, x, y, LIFT.crate, '#5e4224', () => crate(g, x, y, P, r), .07);
+        else if (k === 'bush') bush(g, x, y, r);
+        else if (k === 'closet') raised(g, x, y, LIFT.closet, '#3a2414', () => closet(g, x, y, P), .1);
+        else if (k === 'door') doorFrame(g, lv, x, y, P);
+        else if (k === 'locked') lockedDoor(g, lv, x, y, P);
+        else if (k === 'fuse') raised(g, x, y, LIFT.fuse, '#3c434b', () => fuseBox(g, x, y, P), .12);
+        else if (k === 'radio') raised(g, x, y, LIFT.radio, '#3d2716', () => radioBox(g, x, y), .1);
+        else if (k === 'plant') raised(g, x, y, LIFT.plant, '#5a3520', () => plant(g, x, y, r), .2);
+        else if (k === 'case' && lv.artifact) raised(g, x, y, LIFT.case, '#6d665b', () => pedestal(g, x + .5, y + .5, P), .22);
+      }
     }
-    // Schacht über die Wand
-    for (let y = 0; y < lv.H; y++) for (let x = 0; x < lv.W; x++) if (K(x, y) === 'vent') vent(g, lv, x, y, P);
-    // Möbel und Pflanzen
-    for (let y = 0; y < lv.H; y++) for (let x = 0; x < lv.W; x++) {
-      const k = K(x, y), r = rng(hash(x, y, 3));
-      if (k === 'statue') statue(g, x, y, P);
-      else if (k === 'crate') crate(g, x, y, P, r);
-      else if (k === 'bush') bush(g, x, y, r);
-      else if (k === 'closet') closet(g, x, y, P);
-      else if (k === 'door') doorFrame(g, lv, x, y, P);
-      else if (k === 'locked') lockedDoor(g, lv, x, y, P);
-      else if (k === 'window') windowTile(g, lv, x, y, P);
-      else if (k === 'fuse') fuseBox(g, x, y, P);
-      else if (k === 'radio') radioBox(g, x, y);
-      else if (k === 'plant') plant(g, x, y, r);
-    }
-    if (lv.artifact) pedestal(g, lv.artifact[0] + .5, lv.artifact[1] + .5, P);
     car(g, lv, P);
     exitMark(g, lv, P);
     lamps(g, lv, P);
@@ -2381,14 +2382,27 @@ else window.LEVEL = LEVEL;
       g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = P; g.strokeRect(x + P / 2, y + P / 2, 1 - P, 1 - P);
     }
   }
+  // Höhen in Feldern (nur Bild): wie weit die Oberseite nach oben versetzt ist
+  const WALL_H = .5;
+  const LIFT = { statue: .42, crate: .34, closet: .55, fuse: .3, radio: .22, plant: .2, case: .26 };
+  // Gegenstand mit Höhe: Vorderseite unten, dann die Oberseite um h nach oben versetzt
+  function raised(g, x, y, h, faceCol, top, inset) {
+    const i = inset == null ? .13 : inset;
+    const gr = g.createLinearGradient(0, y + 1 - i - h, 0, y + 1 - i); gr.addColorStop(0, shade(faceCol, 12)); gr.addColorStop(1, shade(faceCol, -25));
+    g.fillStyle = gr; g.fillRect(x + i, y + 1 - i - h, 1 - 2 * i, h);
+    g.save(); g.translate(0, -h); top(); g.restore();
+  }
   function wall(g, lv, x, y, building, P, r) {
     const top = building ? '#2a2420' : '#4a3427', face = building ? '#7d7264' : '#7a4a35', edge = building ? '#a99a84' : '#a0705a';
+    const below = C.kindAt(lv, x, y + 1);
+    const showFace = y + 1 < lv.H && below !== 'wall' && below !== 'vent' && below !== 'window';
+    const H = WALL_H;
+    g.save(); g.translate(0, -H);
     g.fillStyle = shade(top, (r() - .5) * 8); g.fillRect(x, y, 1, 1);
     if (!building) { g.strokeStyle = 'rgba(255,220,190,.12)'; g.lineWidth = P; g.strokeRect(x + .08, y + .08, .84, .84); }
-    const below = C.kindAt(lv, x, y + 1);
-    const showFace = y + 1 < lv.H && below !== 'wall' && below !== 'vent';
+    g.restore();
     if (showFace) {
-      const fh = .34, fy = y + 1 - fh;
+      const fh = H, fy = y + 1 - fh;
       const gr = g.createLinearGradient(0, fy, 0, y + 1); gr.addColorStop(0, shade(face, 18)); gr.addColorStop(1, shade(face, -30));
       g.fillStyle = gr; g.fillRect(x, fy, 1, fh);
       if (!building) {
@@ -2400,14 +2414,18 @@ else window.LEVEL = LEVEL;
       }
       g.fillStyle = edge; g.fillRect(x, fy, 1, Math.max(P, .025));
     }
+    g.save(); g.translate(0, -H);
     g.strokeStyle = edge; g.lineWidth = Math.max(P, .03); g.beginPath();
-    const open = (k) => k !== 'wall' && k !== 'vent';
+    const open = (k) => k !== 'wall' && k !== 'vent' && k !== 'window';
     if (open(C.kindAt(lv, x, y - 1)) && y > 0) { g.moveTo(x, y + .015); g.lineTo(x + 1, y + .015); }
     if (open(C.kindAt(lv, x - 1, y)) && x > 0) { g.moveTo(x + .015, y); g.lineTo(x + .015, y + 1); }
     if (open(C.kindAt(lv, x + 1, y)) && x < lv.W - 1) { g.moveTo(x + .985, y); g.lineTo(x + .985, y + 1); }
-    g.stroke();
+    g.stroke(); g.restore();
   }
   function vent(g, lv, x, y, P) {
+    g.save(); g.translate(0, -WALL_H); vent2d(g, lv, x, y, P); g.restore();
+  }
+  function vent2d(g, lv, x, y, P) {
     const v = (dx, dy) => C.kindAt(lv, x + dx, y + dy) === 'vent';
     g.fillStyle = '#7f8790';
     const w = .46, o = (1 - w) / 2;
@@ -2523,6 +2541,15 @@ else window.LEVEL = LEVEL;
   // Geschlossene Tür: Türblatt quer im Rahmen
   function closedDoor(g, lv, x, y) {
     const h = doorSide(lv, x, y) === 'h';
+    if (h) {
+      // Türblatt steht: Vorderseite als Holzpaneel in Wandhöhe, oben eine schmale Kante
+      const gr0 = g.createLinearGradient(0, y + .7 - WALL_H, 0, y + .7); gr0.addColorStop(0, '#9a6a3e'); gr0.addColorStop(1, '#5a3a20');
+      g.fillStyle = gr0; g.fillRect(x + .04, y + .7 - WALL_H, .92, WALL_H);
+      g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = .02; g.strokeRect(x + .12, y + .74 - WALL_H, .76, WALL_H - .1);
+      g.fillStyle = '#d9b45c'; circle(g, x + .78, y + .7 - WALL_H * .45, .04); g.fill();
+      g.fillStyle = '#4e321b'; g.fillRect(x + .04, y + .3 - WALL_H, .92, .4);
+      return;
+    }
     const gr = g.createLinearGradient(x, y, x + 1, y + 1); gr.addColorStop(0, '#8a5d36'); gr.addColorStop(1, '#4e321b');
     g.fillStyle = gr;
     if (h) g.fillRect(x + .04, y + .3, .92, .4); else g.fillRect(x + .3, y + .04, .4, .92);
@@ -2531,6 +2558,11 @@ else window.LEVEL = LEVEL;
     g.fillStyle = '#d9b45c'; if (h) { g.beginPath(); g.arc(x + .78, y + .5, .045, 0, Math.PI * 2); g.fill(); } else { g.beginPath(); g.arc(x + .5, y + .78, .045, 0, Math.PI * 2); g.fill(); }
   }
   function windowTile(g, lv, x, y, P) {
+    g.save(); g.translate(0, -WALL_H); window2d(g, lv, x, y, P); g.restore();
+    // Glas auch in der Vorderseite, damit man es als Fenster erkennt
+    if (doorSide(lv, x, y) === 'h') { g.fillStyle = 'rgba(150,200,240,.4)'; g.fillRect(x + .12, y + 1 - WALL_H * .8, .76, WALL_H * .5); g.strokeStyle = 'rgba(230,245,255,.7)'; g.lineWidth = .02; g.strokeRect(x + .12, y + 1 - WALL_H * .8, .76, WALL_H * .5); }
+  }
+  function window2d(g, lv, x, y, P) {
     const h = doorSide(lv, x, y) === 'h';
     g.fillStyle = '#2a2420'; g.fillRect(x, y, 1, 1);
     // Fensterbank und Glas
@@ -2681,6 +2713,7 @@ else window.LEVEL = LEVEL;
     const po = opt.pose || NOPOSE;
     if (po.kneel) g.scale(.9, .9);
     g.fillStyle = 'rgba(0,0,0,.4)'; ell(g, .05, .07, .29, .25); g.fill();
+    g.translate(0, po.kneel ? -.05 : -.12);   // 2,5D: Figur steht über ihrem Schatten
     g.rotate(ang + (po.spin || 0));
     if (po.lean) g.translate(po.lean * .13, 0);
     const sw = walk ? Math.sin(walk) : 0, amp = opt.run ? .2 : .13;
@@ -2882,7 +2915,7 @@ else window.LEVEL = LEVEL;
     g.fillStyle = '#fff'; circle(g, x - .05, y - .09, .025); g.fill();
   }
 
-  root.Render = { rgba, shade, rrect, ell, circle, polyPath, buildStatic, openDoor, closedDoor, drawPerson, drawLying, drawEgg, drawCase, brokenDoor, drawActivity, drawPainting, LOOK, guardLook,
+  root.Render = { rgba, shade, rrect, ell, circle, polyPath, buildStatic, openDoor, closedDoor, drawPerson, drawLying, drawEgg, drawCase, brokenDoor, drawActivity, LIFT, WALL_H, drawPainting, LOOK, guardLook,
     busyP, busyPose, fallP, snapP, riseP, drawImpact, drawDress, lightPoly, lightBlocks, drawFixture, ease, FALL, SNAP, RISE, IMPACT, get softMode() { return canFilter == null ? 'unbekannt' : canFilter ? 'filter' : 'kopien'; } };
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -3341,11 +3374,12 @@ else window.LEVEL = LEVEL;
       g.strokeStyle = rgba(col, .6); g.lineWidth = 1.3 * P; polyPath(g, poly); g.stroke();
     });
 
-    if (!run.item.taken && lv.artifact) R.drawEgg(g, lv.artifact[0] + .5, lv.artifact[1] + .5, now);
+    const caseLift = lv.artifact && C.kindAt(lv, lv.artifact[0], lv.artifact[1]) === 'case' ? R.LIFT.case : 0;
+    if (!run.item.taken && lv.artifact) R.drawEgg(g, lv.artifact[0] + .5, lv.artifact[1] + .5 - caseLift, now);
     if (mode === 'brief' && camTarget) { const pr = (now % 1600) / 1600; g.strokeStyle = rgba('#e9c46a', .8 * (1 - pr)); g.lineWidth = 3 * P; circle(g, camTarget.x, camTarget.y, .6 + pr * 1.4); g.stroke(); }
     for (const k of run.radioOn) drawMusic(g, P, now, k % lv.W, (k / lv.W) | 0);
     lv.loot.forEach((L, i) => R.drawPainting(g, L.wall, L.from, run.loot.includes(i), i));
-    if (lv.artifact && C.kindAt(lv, lv.artifact[0], lv.artifact[1]) === 'case') R.drawCase(g, lv.artifact[0] + .5, lv.artifact[1] + .5, run.caseBroken ? 'broken' : run.opened.has(lv.artifact[1] * lv.W + lv.artifact[0]) ? 'open' : 'closed', now);
+    if (lv.artifact && C.kindAt(lv, lv.artifact[0], lv.artifact[1]) === 'case') R.drawCase(g, lv.artifact[0] + .5, lv.artifact[1] + .5 - caseLift, run.caseBroken ? 'broken' : run.opened.has(lv.artifact[1] * lv.W + lv.artifact[0]) ? 'open' : 'closed', now);
     for (const [x, y] of run.coinsOnFloor) {
       const cx = x + .5, cy = y + .5, k = .5 + .5 * Math.sin(now / 300);
       g.fillStyle = rgba('#ffd36b', .18 + .12 * k); circle(g, cx, cy, .32); g.fill();
