@@ -898,7 +898,8 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
     this.loot = [];        // genommene Nebenbeute (Indizes in lv.loot)
     this.stats = { ko: 0, tie: 0, spotted: 0, throws: 0 };
     this.radioOn = [];     // Feldindizes laufender Radios: Musik lockt eine Wache und übertönt Schritte in der Nähe
-    this.dark = false;    // Sicherungskasten: Licht in der Zone aus     // Verkleidungen, die aufgeflogen sind
+    this.dark = false;    // Sicherungskasten: Licht in der Zone aus
+    this.darkAt = -1;     // wann das Licht zuletzt umgeschaltet wurde (Flackern in der Grafik)
     this.lockDone = {};   // angefangene Schlösser: Feldindex -> schon geschaffte Ticks   // geworfene Münzen, die noch am Boden liegen
     this.signals = [];    // Showdown-Signale (A, B, …), die schon gegeben wurden
     this.closed = new Set((def.closedDoors || []).map(([x, y]) => idx(lv, x, y)));   // geschlossene Türen
@@ -930,7 +931,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
         active: !g.extra, mode: 'route', clock: 0, x: st.x, y: st.y, ang: st.ang, moving: st.moving, walk: 0,
         path: [], step: null, goal: null, purpose: null, search: 0, searchAng: 0,
         sus: 0, wasSeeing: false, stare: false, lastSeen: null, radioOn: false, radio: 0, spotCd: 0,
-        down: false, tied: false, wakeAt: 0, hidden: false, carriedBy: -1, found: false, bodyIdx: -1, seeing: -1, stirred: false, dazedUntil: 0,
+        down: false, tied: false, wakeAt: 0, downAt: -1, tiedAt: -1, upAt: -1, hidden: false, carriedBy: -1, found: false, bodyIdx: -1, seeing: -1, stirred: false, dazedUntil: 0,
         outfit: g.kind === 'civil' ? 'kittel' : null, checks: [], check: null, poke: 0, report: null, reportTo: -1, hurry: false, cowerT: 0, coins: 0, happyUntil: 0, radioFix: null
       };
     });
@@ -1300,7 +1301,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
     }
     // Wache am Sicherungskasten: macht das Licht wieder an
     if (G.fixing && Math.hypot(G.fixing[0] + 0.5 - G.x, G.fixing[1] + 0.5 - G.y) < 1.6) {
-      if (this.dark) { this.dark = false; this.events.push({ type: 'lightsOn', g: i }); }
+      if (this.dark) { this.dark = false; this.darkAt = this.t; this.events.push({ type: 'lightsOn', g: i }); }
       G.fixing = null;
     }
     // Wache geht durch eine geschlossene Tür: macht sie auf
@@ -1707,9 +1708,9 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       if (this.t >= c.busy.until) {
         const b = c.busy; c.busy = null;
         if (b.type === 'pick') { c.carrying = b.g; this.gs[b.g].carriedBy = ci; this.gs[b.g].hidden = false; this.events.push({ type: 'pick', c: ci }); }
-        else if (b.type === 'tie') { this.gs[b.g].tied = true; c.ties--; this.stats.tie++; this.events.push({ type: 'tie', c: ci, left: c.ties }); }
+        else if (b.type === 'tie') { this.gs[b.g].tied = true; this.gs[b.g].tiedAt = this.t; c.ties--; this.stats.tie++; this.events.push({ type: 'tie', c: ci, left: c.ties }); }
         else if (b.type === 'fuse') {
-          this.dark = !this.dark;
+          this.dark = !this.dark; this.darkAt = this.t;
           this.noise(b.x + 0.5, b.y + 0.5, 1.5, ci);   // Klack
           this.events.push({ type: this.dark ? 'lightsOff' : 'lightsOn', c: ci });
           if (this.dark) this.sendFixer(b.x, b.y);
@@ -1775,16 +1776,16 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
           else if (this.t > c.waitKo) { c.order = null; c.waitKo = 0; c.queue = []; this.events.push({ type: 'tooStrong', c: ci, g: o.g }); }
         } else if (o.type === 'ko') {
           const i = o.g;
-          for (const m of team) { if (m !== c) { m.order = null; m.path = []; m.waitKo = 0; m.busy = { type: 'ko', until: this.t + m.koTime }; } }
+          for (const m of team) { if (m !== c) { m.order = null; m.path = []; m.waitKo = 0; m.busy = { t0: this.t, type: 'ko', until: this.t + m.koTime }; } }
           c.order = null; c.waitKo = 0;
-          G.down = true; G.stirred = false; G.wakeAt = this.t + WAKE; G.mode = 'go'; G.path = []; G.step = null; G.purpose = null; G.radioOn = false; G.sus = 0; G.happyUntil = 0;
+          G.down = true; G.downAt = this.t; G.stirred = false; G.wakeAt = this.t + WAKE; G.mode = 'go'; G.path = []; G.step = null; G.purpose = null; G.radioOn = false; G.sus = 0; G.happyUntil = 0;
           G.x = Math.floor(G.x) + 0.5; G.y = Math.floor(G.y) + 0.5;
           // Eingesteckte Münzen fallen heraus
           for (; G.coins > 0; G.coins--) this.coinsOnFloor.push(tileOf([G.x, G.y]));
-          c.busy = { type: 'ko', until: this.t + c.koTime };
+          c.busy = { t0: this.t, type: 'ko', until: this.t + c.koTime };
           this.events.push({ type: 'ko', c: ci, g: i }); this.stats.ko++;
-        } else if (o.type === 'pick') { c.order = null; c.busy = { type: 'pick', g: o.g, until: this.t + PICK_TIME }; }
-        else { c.order = null; c.busy = { type: 'tie', g: o.g, until: this.t + TIE_TIME }; }
+        } else if (o.type === 'pick') { c.order = null; c.busy = { t0: this.t, type: 'pick', g: o.g, until: this.t + PICK_TIME }; }
+        else { c.order = null; c.busy = { t0: this.t, type: 'tie', g: o.g, until: this.t + TIE_TIME }; }
       } else if (!c.move && (o.repath-- <= 0 || !c.path.length)) {
         const gt = tileOf([G.x, G.y]);
         // Schräg daneben reicht zum Tragen und Fesseln; zum Betäuben nur mit langer Reichweite
@@ -1797,23 +1798,23 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
     }
     if (o && o.type === 'fuse' && !c.move && !c.path.length) {
       c.order = null;
-      if (Math.abs(o.x - c.tile[0]) + Math.abs(o.y - c.tile[1]) === 1) { c.busy = { type: 'fuse', x: o.x, y: o.y, until: this.t + FUSE_TIME }; c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]); }
+      if (Math.abs(o.x - c.tile[0]) + Math.abs(o.y - c.tile[1]) === 1) { c.busy = { t0: this.t, type: 'fuse', x: o.x, y: o.y, until: this.t + FUSE_TIME }; c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]); }
     }
     if (o && o.type === 'take' && !c.move && !c.path.length) {
       c.order = null;
-      if (Math.abs(o.x - c.tile[0]) + Math.abs(o.y - c.tile[1]) === 1) { c.busy = { type: 'take', x: o.x, y: o.y, until: this.t + TAKE_TIME }; c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]); }
+      if (Math.abs(o.x - c.tile[0]) + Math.abs(o.y - c.tile[1]) === 1) { c.busy = { t0: this.t, type: 'take', x: o.x, y: o.y, until: this.t + TAKE_TIME }; c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]); }
     }
     if (o && o.type === 'radio' && !c.move && !c.path.length) {
       c.order = null;
-      if (Math.abs(o.x - c.tile[0]) + Math.abs(o.y - c.tile[1]) === 1) { c.busy = { type: 'radio', x: o.x, y: o.y, until: this.t + RADIO_TIME }; c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]); }
+      if (Math.abs(o.x - c.tile[0]) + Math.abs(o.y - c.tile[1]) === 1) { c.busy = { t0: this.t, type: 'radio', x: o.x, y: o.y, until: this.t + RADIO_TIME }; c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]); }
     }
     if (o && o.type === 'dress' && !c.move && !c.path.length) {
       c.order = null;
-      if (Math.abs(o.x - c.tile[0]) <= 1 && Math.abs(o.y - c.tile[1]) <= 1) { c.busy = { type: 'dress', x: o.x, y: o.y, g: o.g, until: this.t + DRESS_TIME }; c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]); }
+      if (Math.abs(o.x - c.tile[0]) <= 1 && Math.abs(o.y - c.tile[1]) <= 1) { c.busy = { t0: this.t, type: 'dress', x: o.x, y: o.y, g: o.g, until: this.t + DRESS_TIME }; c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]); }
     }
     if (o && o.type === 'door' && !c.move && !c.path.length) {
       if (Math.abs(o.x - c.tile[0]) + Math.abs(o.y - c.tile[1]) === 1) {
-        c.busy = { type: 'door', x: o.x, y: o.y, until: this.t + DOOR_TIME };
+        c.busy = { t0: this.t, type: 'door', x: o.x, y: o.y, until: this.t + DOOR_TIME };
         c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]);
       }
       c.order = null;
@@ -1821,7 +1822,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
     if (o && o.type === 'lock' && !c.move && !c.path.length) {
       if (Math.abs(o.x - c.tile[0]) + Math.abs(o.y - c.tile[1]) === 1) {
         const pk = this.pickInfo(ci, o.x, o.y, o.bolt), li = idx(lv, o.x, o.y), done = o.bolt ? 0 : (this.lockDone[li] || 0);
-        c.busy = { type: 'lock', x: o.x, y: o.y, until: this.t + Math.max(1, pk.time - done), start: this.t - done, total: pk.time, noise: pk.noise, pulseAt: this.t, bolt: !!o.bolt };
+        c.busy = { t0: this.t, type: 'lock', x: o.x, y: o.y, until: this.t + Math.max(1, pk.time - done), start: this.t - done, total: pk.time, noise: pk.noise, pulseAt: this.t, bolt: !!o.bolt };
         c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]);
         this.events.push({ type: 'picking', c: ci, x: o.x, y: o.y, bolt: !!o.bolt, isCase: kindAt(lv, o.x, o.y) === 'case' });
       }
@@ -1941,7 +1942,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       if (!G.stirred && this.t >= G.wakeAt - STIR) { G.stirred = true; this.events.push({ type: 'stir', g: i }); }
       if (this.t < G.wakeAt) continue;
       if (G.carriedBy >= 0) { const c = this.crew[G.carriedBy]; c.carrying = -1; G.carriedBy = -1; }
-      G.down = false; G.hidden = false; G.found = false; G.stirred = false;
+      G.down = false; G.upAt = this.t; G.hidden = false; G.found = false; G.stirred = false;
       const t = tileOf([G.x, G.y]);
       if (!guardWalkable(this.lv, t[0], t[1], this)) {
         const n = DIRS.map(([dx, dy]) => [t[0] + dx, t[1] + dy]).find(([x, y]) => guardWalkable(this.lv, x, y, this));
@@ -2175,16 +2176,10 @@ else window.LEVEL = LEVEL;
       else if (interior(k)) floorTile(g, floorTheme(x, y), x, y, r, P);
       else { g.fillStyle = '#1f1b18'; g.fillRect(x, y, 1, 1); }
     }
-    // Schatten an Wänden
-    for (let y = 0; y < lv.H; y++) for (let x = 0; x < lv.W; x++) {
-      const k = K(x, y);
-      if (isWallish(k)) continue;
-      const sh = (x0, y0, x1, y1, a) => { const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; };
-      if (isWallish(K(x, y - 1))) { sh(0, y, 0, y + .4, .5); g.fillRect(x, y, 1, .4); }
-      if (isWallish(K(x - 1, y))) { sh(x, 0, x + .3, 0, .4); g.fillRect(x, y, .3, 1); }
-      if (isWallish(K(x + 1, y))) { sh(x + 1, 0, x + .7, 0, .4); g.fillRect(x + .7, y, .3, 1); }
-      if (isWallish(K(x, y + 1))) { sh(0, y + 1, 0, y + .8, .3); g.fillRect(x, y + .8, 1, .2); }
-    }
+    // Teppiche unter den Möbeln und unter den Schatten
+    for (const r of (lv.def.carpets || [])) carpet(g, r[0], r[1], r[2] + 1 - r[0], r[3] + 1 - r[1]);
+    // Weiche Schatten von Wänden und Möbeln (eine Maske, weichgezeichnet)
+    softShadows(g, lv, pxPerTile);
     // Wände
     for (let y = 0; y < lv.H; y++) for (let x = 0; x < lv.W; x++) {
       const k = K(x, y);
@@ -2193,8 +2188,6 @@ else window.LEVEL = LEVEL;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (interior(K(x + dx, y + dy))) building = true;
       wall(g, lv, x, y, building, P, rng(hash(x, y, 2)));
     }
-    // Teppiche unter den Möbeln
-    for (const r of (lv.def.carpets || [])) carpet(g, r[0], r[1], r[2] + 1 - r[0], r[3] + 1 - r[1]);
     // Schacht über die Wand
     for (let y = 0; y < lv.H; y++) for (let x = 0; x < lv.W; x++) if (K(x, y) === 'vent') vent(g, lv, x, y, P);
     // Möbel und Pflanzen
@@ -2216,6 +2209,53 @@ else window.LEVEL = LEVEL;
     exitMark(g, lv, P);
     lamps(g, lv, P);
     return c;
+  }
+
+  /* ---------- Weiche Schatten ----------
+     Alles, was steht (Wände, Kisten, Schränke, Statuen, Pflanzen, Auto), kommt schwarz in eine Maske. Die wird zweimal weichgezeichnet
+     auf den Boden gelegt: dicht und rundum (Kontaktschatten), dann breiter nach unten rechts versetzt (Licht von oben links). */
+  let canFilter = null;
+  function filterOk(g) {
+    if (canFilter == null) { try { g.filter = 'blur(2px)'; canFilter = g.filter === 'blur(2px)'; g.filter = 'none'; } catch (e) { canFilter = false; } }
+    return canFilter;
+  }
+  const TAPS = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [.7, .7], [-.7, .7], [.7, -.7], [-.7, -.7], [.45, 0], [-.45, 0], [0, .45], [0, -.45]];
+  function blurDraw(g, img, ox, oy, r, a) {
+    if (filterOk(g)) { g.filter = `blur(${r.toFixed(1)}px)`; g.globalAlpha = a; g.drawImage(img, ox, oy); g.filter = 'none'; }
+    else { g.globalAlpha = a / TAPS.length * 1.5; for (const [tx, ty] of TAPS) g.drawImage(img, ox + tx * r * 1.4, oy + ty * r * 1.4); }   // ohne Filter (ältere Browser): viele leicht versetzte Kopien
+    g.globalAlpha = 1;
+  }
+  function shadowMask(lv, px) {
+    const m = document.createElement('canvas');
+    m.width = Math.round(lv.W * px); m.height = Math.round(lv.H * px);
+    const s = m.getContext('2d'); s.scale(px, px); s.fillStyle = '#000';
+    for (let y = 0; y < lv.H; y++) for (let x = 0; x < lv.W; x++) {
+      const k = C.kindAt(lv, x, y);
+      if (k === 'wall' || k === 'vent' || k === 'locked') s.fillRect(x, y, 1, 1);
+      else if (k === 'window') { if (doorSide(lv, x, y) === 'h') s.fillRect(x, y + .3, 1, .4); else s.fillRect(x + .3, y, .4, 1); }
+      else if (k === 'crate') s.fillRect(x + .07, y + .07, .86, .86);
+      else if (k === 'closet') s.fillRect(x + .1, y + .08, .8, .84);
+      else if (k === 'statue') s.fillRect(x + .13, y + .13, .74, .74);
+      else if (k === 'radio') { rrect(s, x + .1, y + .1, .8, .7, .06); s.fill(); }
+      else if (k === 'bush') { circle(s, x + .5, y + .5, .46); s.fill(); }
+      else if (k === 'plant') { circle(s, x + .5, y + .5, .38); s.fill(); }
+    }
+    if (lv.artifact) { circle(s, lv.artifact[0] + .5, lv.artifact[1] + .5, .28); s.fill(); }
+    const cars = [];
+    for (let y = 0; y < lv.H; y++) for (let x = 0; x < lv.W; x++) if (C.kindAt(lv, x, y) === 'car') cars.push([x, y]);
+    if (cars.length) {
+      const x0 = Math.min(...cars.map(c => c[0])), x1 = Math.max(...cars.map(c => c[0])) + 1, y0 = Math.min(...cars.map(c => c[1]));
+      rrect(s, x0 + .05, y0 + .1, x1 - x0 - .1, .82, .25); s.fill();
+    }
+    return m;
+  }
+  function softShadows(g, lv, px) {
+    const m = shadowMask(lv, px);
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+    blurDraw(g, m, 0, 0, .1 * px, .62);                  // Kontaktschatten: dicht an Wand und Möbel
+    blurDraw(g, m, .14 * px, .2 * px, .2 * px, .55);     // Schlagschatten: Licht von oben links
+    g.restore();
+    m.width = m.height = 0;   // Speicher frei
   }
 
   function grass(g, x, y, r) {
@@ -2322,7 +2362,6 @@ else window.LEVEL = LEVEL;
   }
   function statue(g, x, y, P) {
     const cx = x + .5, cy = y + .5, p = .74;
-    g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(cx - p / 2 + .06, cy - p / 2 + .08, p, p);
     const gr = g.createLinearGradient(cx - p / 2, cy - p / 2, cx + p / 2, cy + p / 2); gr.addColorStop(0, '#6b6358'); gr.addColorStop(1, '#3f3a33');
     g.fillStyle = gr; g.fillRect(cx - p / 2, cy - p / 2, p, p);
     g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = P; g.strokeRect(cx - p / 2 + .06, cy - p / 2 + .06, p - .12, p - .12);
@@ -2334,7 +2373,6 @@ else window.LEVEL = LEVEL;
   }
   function crate(g, x, y, P, r) {
     const X = x + .07, Y = y + .07, s = .86;
-    g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(X + .06, Y + .08, s, s);
     g.fillStyle = shade('#8a6438', (r() - .5) * 16); g.fillRect(X, Y, s, s);
     g.strokeStyle = '#4a3218'; g.lineWidth = .04; g.strokeRect(X + .02, Y + .02, s - .04, s - .04);
     g.beginPath(); g.moveTo(X + .04, Y + .04); g.lineTo(X + s - .04, Y + s - .04); g.moveTo(X + s - .04, Y + .04); g.lineTo(X + .04, Y + s - .04); g.stroke();
@@ -2342,7 +2380,6 @@ else window.LEVEL = LEVEL;
   }
   function bush(g, x, y, r) {
     const cx = x + .5, cy = y + .5;
-    g.fillStyle = 'rgba(0,0,0,.4)'; circle(g, cx + .06, cy + .08, .5); g.fill();
     const blobs = [];
     for (let i = 0; i < 7; i++) { const a = r() * Math.PI * 2, d = r() * .22; blobs.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d, .22 + r() * .14]); }
     for (const [bx, by, br] of blobs) { const gr = g.createRadialGradient(bx - br * .3, by - br * .3, br * .1, bx, by, br); gr.addColorStop(0, '#5f8f46'); gr.addColorStop(1, '#22401c'); g.fillStyle = gr; circle(g, bx, by, br); g.fill(); }
@@ -2352,7 +2389,6 @@ else window.LEVEL = LEVEL;
   // Topfpflanze: Kübel mit dichtem Grün, Versteck wie ein Busch
   function plant(g, x, y, r) {
     const cx = x + .5, cy = y + .5;
-    g.fillStyle = 'rgba(0,0,0,.4)'; circle(g, cx + .05, cy + .07, .44); g.fill();
     g.fillStyle = '#7a4a2b'; circle(g, cx, cy, .34); g.fill();
     g.strokeStyle = '#c08a52'; g.lineWidth = .04; circle(g, cx, cy, .34); g.stroke();
     for (let i = 0; i < 9; i++) {
@@ -2363,7 +2399,6 @@ else window.LEVEL = LEVEL;
   }
   // Radio auf einem Tischchen
   function radioBox(g, x, y) {
-    g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(x + .14, y + .16, .76, .7);
     g.fillStyle = '#5a3a22'; rrect(g, x + .1, y + .1, .8, .7, .06); g.fill();
     g.fillStyle = '#2a2f36'; rrect(g, x + .2, y + .26, .6, .36, .05); g.fill();
     g.fillStyle = '#c9a24a'; circle(g, x + .36, y + .44, .1); g.fill();
@@ -2380,7 +2415,6 @@ else window.LEVEL = LEVEL;
   }
   function closet(g, x, y, P) {
     const X = x + .1, Y = y + .08, w = .8, h = .84;
-    g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(X + .05, Y + .07, w, h);
     const gr = g.createLinearGradient(X, Y, X + w, Y + h); gr.addColorStop(0, '#6e4527'); gr.addColorStop(1, '#3d2614');
     g.fillStyle = gr; g.fillRect(X, Y, w, h);
     g.strokeStyle = '#26170c'; g.lineWidth = .03; g.strokeRect(X + .03, Y + .03, w - .06, h - .06);
@@ -2452,7 +2486,6 @@ else window.LEVEL = LEVEL;
   }
   function pedestal(g, cx, cy, P) {
     g.fillStyle = 'rgba(130,20,30,.6)'; circle(g, cx, cy, .46); g.fill();
-    g.fillStyle = 'rgba(0,0,0,.4)'; circle(g, cx + .04, cy + .06, .28); g.fill();
     const gr = g.createRadialGradient(cx - .08, cy - .08, 0, cx, cy, .3); gr.addColorStop(0, '#efe7d8'); gr.addColorStop(1, '#8f8679');
     g.fillStyle = gr; circle(g, cx, cy, .27); g.fill();
     g.strokeStyle = '#c9a24a'; g.lineWidth = .03; g.stroke();
@@ -2465,7 +2498,6 @@ else window.LEVEL = LEVEL;
     if (!cars.length) return;
     const x0 = Math.min(...cars.map(c => c[0])), x1 = Math.max(...cars.map(c => c[0])) + 1, y0 = Math.min(...cars.map(c => c[1]));
     const X = x0 + .05, Y = y0 + .1, w = x1 - x0 - .1, h = .82;
-    g.fillStyle = 'rgba(0,0,0,.5)'; rrect(g, X + .08, Y + .1, w, h, .25); g.fill();
     const gr = g.createLinearGradient(0, Y, 0, Y + h); gr.addColorStop(0, '#3c6a4e'); gr.addColorStop(1, '#1f3a2a');
     g.fillStyle = gr; rrect(g, X, Y, w, h, .25); g.fill();
     g.fillStyle = 'rgba(160,210,230,.55)'; rrect(g, X + w * .22, Y + .1, w * .2, h - .2, .08); g.fill(); rrect(g, X + w * .62, Y + .12, w * .16, h - .24, .08); g.fill();
@@ -2491,14 +2523,51 @@ else window.LEVEL = LEVEL;
     }
   }
 
+  /* ---------- Licht: Lampen leuchten nicht durch Wände ----------
+     Wände und geschlossene Türen halten Lampenlicht auf, Möbel nicht. Sonst sähe der Schatten hinter einer Statue
+     wie ein Versteck aus, das keins ist (Lampen ändern nichts daran, wer gesehen wird). Am Rand ein Stück in die Wand hinein,
+     damit die Kante angestrahlt wird. */
+  function lightBlocks(lv, x, y, w) {
+    const k = C.kindAt(lv, x, y);
+    if (k === 'wall' || k === 'vent') return true;
+    if (k === 'door' || k === 'locked') return C.opaque(lv, x, y, w);
+    return false;
+  }
+  function lightPoly(lv, x, y, r, w, rays) {
+    rays = rays || 72;
+    const pts = [], ox = Math.floor(x), oy = Math.floor(y);
+    for (let i = 0; i < rays; i++) {
+      const a = i / rays * Math.PI * 2, cx = Math.cos(a), cy = Math.sin(a);
+      let d = .04;
+      while (d < r) {
+        const tx = Math.floor(x + cx * d), ty = Math.floor(y + cy * d);
+        if ((tx !== ox || ty !== oy) && lightBlocks(lv, tx, ty, w)) { d += .18; break; }
+        d += .04;
+      }
+      d = Math.min(d, r);
+      pts.push([x + cx * d, y + cy * d]);
+    }
+    return pts;
+  }
+  // Deckenlampe in einer schaltbaren Zone: an mit Schein, aus dunkel
+  function drawFixture(g, x, y, on) {
+    g.fillStyle = 'rgba(0,0,0,.35)'; circle(g, x + .03, y + .05, .13); g.fill();
+    g.fillStyle = '#3a3128'; circle(g, x, y, .12); g.fill();
+    g.strokeStyle = '#c9a24a'; g.lineWidth = .025; circle(g, x, y, .12); g.stroke();
+    g.fillStyle = on ? '#fff1c4' : '#4a4640'; circle(g, x, y, .065); g.fill();
+  }
+
   /* ---------- Figuren ---------- */
   function drawPerson(g, x, y, ang, walk, lk, opt) {
     opt = opt || {};
     const s = (opt.scale || 1) * 1.15 * (lk.big ? 1.12 : 1);
     g.save(); g.translate(x, y); g.scale(s, s);
     if (opt.alpha != null) g.globalAlpha = opt.alpha;
+    const po = opt.pose || NOPOSE;
+    if (po.kneel) g.scale(.9, .9);
     g.fillStyle = 'rgba(0,0,0,.4)'; ell(g, .05, .07, .29, .25); g.fill();
-    g.rotate(ang);
+    g.rotate(ang + (po.spin || 0));
+    if (po.lean) g.translate(po.lean * .13, 0);
     const sw = walk ? Math.sin(walk) : 0, amp = opt.run ? .2 : .13;
     // Schuhe
     g.fillStyle = lk.shoe || '#111';
@@ -2515,9 +2584,15 @@ else window.LEVEL = LEVEL;
       g.fillStyle = lk.skin; circle(g, ex, ey, .052); g.fill();
       return [ex, ey];
     };
-    arm(-1, -sw * (opt.run ? 1.4 : 1));
-    const hand = arm(1, sw * (opt.run ? 1.4 : 1), lk.flashlight && !opt.noLight);
-    if (lk.flashlight && !opt.noLight) {
+    const armTo = (side, ex, ey) => {
+      g.strokeStyle = lk.sleeve; g.lineWidth = .1; g.beginPath(); g.moveTo(0, side * .19); g.lineTo(ex, ey); g.stroke();
+      g.fillStyle = lk.skin; circle(g, ex, ey, .052); g.fill();
+    };
+    let hand = null;
+    if (po.reach) { const w = po.work || 0; armTo(-1, .27 + po.reach * .06 + w, -.09 - Math.abs(w) * .3); armTo(1, .27 + po.reach * .06 - w, .09 + Math.abs(w) * .3); }
+    else if (po.up) { armTo(-1, .08 + po.up * .04, -.11); armTo(1, .08 - po.up * .04, .11); }
+    else { arm(-1, -sw * (opt.run ? 1.4 : 1)); hand = arm(1, sw * (opt.run ? 1.4 : 1), lk.flashlight && !opt.noLight); }
+    if (hand && lk.flashlight && !opt.noLight) {
       g.fillStyle = '#9aa3ad'; rrect(g, hand[0] - .01, hand[1] - .035, .15, .07, .02); g.fill();
       g.fillStyle = '#fff3c4'; g.fillRect(hand[0] + .13, hand[1] - .035, .025, .07);
     }
@@ -2546,11 +2621,20 @@ else window.LEVEL = LEVEL;
       g.strokeStyle = shade(lk.headCol, 25); g.lineWidth = .015; g.beginPath(); g.moveTo(hx - .1, 0); g.lineTo(hx + .05, 0); g.stroke();
       if (lk.bun) { g.fillStyle = shade(lk.headCol, -12); circle(g, hx - .15, 0, .06); g.fill(); }
     }
+    // Schlag: kurzer Bogen vor der Figur
+    if (po.swoosh > 0) {
+      g.strokeStyle = `rgba(238,243,250,${.75 * po.swoosh})`; g.lineWidth = .045;
+      g.beginPath(); g.arc(.05, 0, .46, -1 + (1 - po.swoosh) * .6, .9 - (1 - po.swoosh) * .3); g.stroke();
+    }
     g.restore();
   }
+  const NOPOSE = {};
 
-  function drawLying(g, x, y, ang, lk, tied, alpha) {
+  // tied: true/false oder Fortschritt 0..1 beim Fesseln · o: { stretch (Fallen), breath (Atmen), snap (gerade gefesselt) }
+  function drawLying(g, x, y, ang, lk, tied, alpha, o) {
+    o = o || NOPOSE;
     g.save(); g.translate(x, y); g.scale(1.1, 1.1); g.rotate(ang); g.globalAlpha = alpha == null ? 1 : alpha;
+    if (o.stretch != null && o.stretch < 1) g.scale(o.stretch, 1);
     g.fillStyle = 'rgba(0,0,0,.35)'; ell(g, .02, .04, .5, .26); g.fill();
     g.lineCap = 'round';
     g.strokeStyle = '#1e2638'; g.lineWidth = .11;
@@ -2559,15 +2643,79 @@ else window.LEVEL = LEVEL;
     g.strokeStyle = lk.sleeve; g.lineWidth = .085;
     g.beginPath(); g.moveTo(.18, -.16); g.lineTo(-.04, -.24); g.moveTo(.18, .16); g.lineTo(.0, .26); g.stroke();
     g.fillStyle = lk.skin; circle(g, -.06, -.25, .045); g.fill(); circle(g, .0, .27, .045); g.fill();
-    g.fillStyle = lk.body; ell(g, .05, 0, .17, .17); g.fill(); g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = .02; g.stroke();
+    const br = 1 + (o.breath || 0) * .05;
+    g.fillStyle = lk.body; ell(g, .05, 0, .17 * br, .17 * br); g.fill(); g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = .02; g.stroke();
     if (lk.vest) { g.fillStyle = '#d6e04a'; g.fillRect(-.02, -.16, .03, .32); }
     g.fillStyle = lk.skin; circle(g, .32, 0, .11); g.fill();
     g.fillStyle = lk.headCol; circle(g, .45, .14, .075); g.fill();   // Mütze daneben
     if (tied) {
-      g.strokeStyle = '#d2b073'; g.lineWidth = .04;
-      for (const bx of [.0, .12, -.3]) { g.beginPath(); g.moveTo(bx, -.2); g.lineTo(bx + .02, .2); g.stroke(); }
+      // Fußgelenke zuerst, dann die Handgelenke; beim Fesseln wächst jedes Band
+      const k = tied === true ? 3 : Math.max(0, Math.min(1, tied)) * 3, snap = o.snap || 0;
+      g.strokeStyle = snap > 0 ? `rgb(${210 + 45 * snap | 0},${176 + 70 * snap | 0},${115 + 85 * snap | 0})` : '#d2b073'; g.lineWidth = .04 + .03 * snap;
+      [-.3, .0, .12].forEach((bx, j) => {
+        const f = Math.max(0, Math.min(1, k - j)); if (f <= 0) return;
+        g.beginPath(); g.moveTo(bx, -.2); g.lineTo(bx + .02 * f, -.2 + .4 * f); g.stroke();
+      });
     }
     g.restore();
+  }
+
+  /* ---------- Animationen ----------
+     Alles hängt an der Spielzeit (run.t), nicht an der Uhr: Pause, Zeitlupe und Zurückspulen zeigen genau dieselben Bilder. */
+  const clamp01 = (k) => k < 0 ? 0 : k > 1 ? 1 : k;
+  const ease = (k) => { k = clamp01(k); return k * k * (3 - 2 * k); };
+  const FALL = 22, SNAP = 24, RISE = 20, IMPACT = 16;   // Ticks: Hinfallen, Kabelbinder zuziehen, Aufstehen, Schlag
+  // Wie weit ist eine laufende Handlung (0..1)? Knacken zählt den schon geschafften Teil mit.
+  function busyP(b, t) {
+    if (!b) return 0;
+    if (b.type === 'lock' && b.total) return clamp01((t - b.start) / b.total);
+    const t0 = b.t0 != null ? b.t0 : t;
+    return clamp01((t - t0) / Math.max(1, b.until - t0));
+  }
+  // Haltung der Crew bei der Arbeit
+  function busyPose(b, t, brute) {
+    if (!b) return null;
+    const p = busyP(b, t), since = t - (b.t0 != null ? b.t0 : t);
+    switch (b.type) {
+      case 'ko':   // der Schlag sitzt im ersten Tick: ganz vorn, dann zurückfedern und festhalten
+        return { lean: p < .15 ? 1 : 1 - ease((p - .15) / .85), reach: 1, swoosh: Math.max(0, 1 - since / 12) };
+      case 'tie': return { kneel: true, reach: .4, work: Math.sin(since * .45) * .06 };
+      case 'pick': return { kneel: p < .7, reach: .6 };
+      case 'dress': return { up: Math.sin(since * .5), spin: Math.sin(p * Math.PI * 3) * .55 * (1 - p * .5) };
+      case 'lock': return { reach: brute ? .8 : .5, work: brute ? (since % 20 < 5 ? .06 : 0) : Math.sin(since * 1.3) * .02, lean: brute && since % 20 < 5 ? .5 : 0 };
+      default: return { reach: .5 };
+    }
+  }
+  // Betäubte Wache: fällt kurz (stretch 0,55 → 1), dann atmet sie; Gefesselte atmen ruhig weiter
+  function fallP(G, t) { return G.downAt >= 0 ? ease((t - G.downAt) / FALL) : 1; }
+  function snapP(G, t) { return G.tiedAt >= 0 && t - G.tiedAt < SNAP ? 1 - (t - G.tiedAt) / SNAP : 0; }
+  function riseP(G, t) { return G.upAt >= 0 && t - G.upAt < RISE ? ease((t - G.upAt) / RISE) : 1; }
+  // Kurzer Aufprall am Kopf der Wache
+  function drawImpact(g, x, y, ang, since) {
+    if (since < 0 || since >= IMPACT) return;
+    const k = since / IMPACT, hx = x + Math.cos(ang) * .3, hy = y + Math.sin(ang) * .3;
+    g.save(); g.strokeStyle = `rgba(255,246,214,${.9 * (1 - k)})`; g.lineWidth = .04; g.lineCap = 'round';
+    for (let i = 0; i < 7; i++) {
+      const a = ang + i * 0.9, r0 = .12 + k * .22, r1 = r0 + .12 * (1 - k * .5);
+      g.beginPath(); g.moveTo(hx + Math.cos(a) * r0, hy + Math.sin(a) * r0); g.lineTo(hx + Math.cos(a) * r1, hy + Math.sin(a) * r1); g.stroke();
+    }
+    g.restore();
+  }
+  // Umziehen: Stoff wirbelt um die Figur, die neue Kleidung breitet sich von innen aus
+  function drawDress(g, x, y, ang, walk, from, to, p, opt) {
+    drawPerson(g, x, y, ang, walk, from, opt);
+    const e = ease(p);
+    if (e > 0) { g.save(); circle(g, x, y, .08 + e * .42); g.clip(); drawPerson(g, x, y, ang, walk, to, opt); g.restore(); }
+    const a = Math.sin(Math.PI * p);
+    if (a > .02) {
+      g.save(); g.lineCap = 'round';
+      for (let i = 0; i < 2; i++) {
+        const st = p * Math.PI * 5 + i * Math.PI;
+        g.strokeStyle = rgba(to.body, .85 * a); g.lineWidth = .07 - i * .02;
+        g.beginPath(); g.arc(x, y, .36 + i * .06, st, st + 1.1); g.stroke();
+      }
+      g.restore();
+    }
   }
 
   // Gemälde an der Wand, zur Seite des Felds davor. Abgenommen: heller Fleck mit Haken.
@@ -2619,7 +2767,8 @@ else window.LEVEL = LEVEL;
     g.fillStyle = '#fff'; circle(g, x - .05, y - .09, .025); g.fill();
   }
 
-  root.Render = { rgba, shade, rrect, ell, circle, polyPath, buildStatic, openDoor, closedDoor, drawPerson, drawLying, drawEgg, drawCase, drawPainting, LOOK, guardLook };
+  root.Render = { rgba, shade, rrect, ell, circle, polyPath, buildStatic, openDoor, closedDoor, drawPerson, drawLying, drawEgg, drawCase, drawPainting, LOOK, guardLook,
+    busyP, busyPose, fallP, snapP, riseP, drawImpact, drawDress, lightPoly, lightBlocks, drawFixture, ease, FALL, SNAP, RISE, IMPACT, get softMode() { return canFilter == null ? 'unbekannt' : canFilter ? 'filter' : 'kopien'; } };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -2977,6 +3126,23 @@ else window.LEVEL = LEVEL;
     return k === 'police' ? '#a8d4ff' : k === 'civil' ? '#d9c8ff' : '#ffe9a8';
   }
 
+  // Lampenlicht: Wände halten es auf. Neu berechnet nur, wenn eine Tür auf- oder zugeht.
+  let lampCache = null, lampKey = '';
+  function lampPolys() {
+    const key = [...run.closed].join(',') + '/' + [...run.opened].join(',');
+    if (!lampCache || lampCache.lv !== run.lv || key !== lampKey) { lampKey = key; lampCache = { lv: run.lv, polys: (run.lv.def.lights || []).map(([x, y, r]) => R.lightPoly(run.lv, x, y, r, run)) }; }
+    return lampCache.polys;
+  }
+  // Licht in der Zone: Beim Umschalten flackert es eine halbe Sekunde (nur Bild, die Spiellogik schaltet sofort)
+  const FLICK = [1, 0, 1, 1, 0, 1, 0];
+  function zoneLit() {
+    const lit = !run.dark, since = run.darkAt >= 0 ? run.t - run.darkAt : 1e9, k = since >> 2;
+    return k < FLICK.length && FLICK[k] ? !lit : lit;
+  }
+  const inRect = (r, x, y) => !!r && x >= r[0] && x < r[2] + 1 && y >= r[1] && y < r[3] + 1;
+  const KITTEL = { body: '#4f8f86', sleeve: '#447d75', apron: '#d8e6e2', scarf: null };
+  const takenLook = (i) => Object.assign({}, R.guardLook(run.lv, i), { body: '#cfc6b8', sleeve: '#cfc6b8', apron: null });
+
   function draw(now) {
     const g = ctx, lv = run.lv, P = 1 / cam.z;
     g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#04070d'; g.fillRect(0, 0, cv.width, cv.height);
@@ -2997,12 +3163,13 @@ else window.LEVEL = LEVEL;
     worldTransform(d);
     d.fillStyle = alarm ? `rgba(34,4,12,${.6 + .1 * (reduceMotion ? .5 : pulse)})` : 'rgba(3,7,24,.62)';
     d.fillRect(-2, -2, lv.W + 4, lv.H + 4);
-    const dz = lv.def.darkZone;
-    if (run.dark && dz) { d.fillStyle = 'rgba(0,2,10,.55)'; d.fillRect(dz[0], dz[1], dz[2] - dz[0] + 1, dz[3] - dz[1] + 1); }
+    const dz = lv.def.darkZone, lit = zoneLit();
+    if (!lit && dz) { d.fillStyle = 'rgba(0,2,10,.55)'; d.fillRect(dz[0], dz[1], dz[2] - dz[0] + 1, dz[3] - dz[1] + 1); }
     d.globalCompositeOperation = 'destination-out';
-    const hole = (x, y, r, a) => { const gr = d.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); d.fillStyle = gr; circle(d, x, y, r); d.fill(); };
-    const off = (x, y) => run.dark && (lv.def.zoneLights || []).some(([zx, zy]) => Math.hypot(zx - x, zy - y) < .6);
-    for (const [x, y, r, a] of (lv.def.lights || [])) if (!off(x, y)) hole(x, y, r, a);
+    const hole = (x, y, r, a, poly) => { const gr = d.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); d.fillStyle = gr; if (poly) polyPath(d, poly); else circle(d, x, y, r); d.fill(); };
+    const off = (x, y) => !lit && (lv.def.zoneLights || []).some(([zx, zy]) => Math.hypot(zx - x, zy - y) < .6);
+    const lamps = lv.def.lights || [], lpoly = lampPolys();
+    lamps.forEach(([x, y, r, a], li) => { if (!off(x, y)) hole(x, y, r, a, lpoly[li]); });
     views.forEach((v, i) => {
       if (!v || run.isCivil(i)) return;   // Zivilisten haben keine Taschenlampe
       const gr = d.createRadialGradient(v.x, v.y, .1, v.x, v.y, v.range);
@@ -3013,6 +3180,23 @@ else window.LEVEL = LEVEL;
     d.globalCompositeOperation = 'source-over';
     g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(darkCv, 0, 0);
     worldTransform(g);
+    // Warmer Schein: Lampen (an Wänden abgeschnitten) und Taschenlampen, im dunklen Saal kräftiger
+    g.save(); g.globalCompositeOperation = 'lighter';
+    lamps.forEach(([x, y, r, a], li) => {
+      if (off(x, y)) return;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, `rgba(255,196,120,${(.07 + .1 * a).toFixed(3)})`); gr.addColorStop(.5, `rgba(255,170,90,${(.03 + .04 * a).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,160,80,0)');
+      g.fillStyle = gr; polyPath(g, lpoly[li]); g.fill();
+    });
+    views.forEach((v, i) => {
+      if (!v || run.isCivil(i)) return;
+      const dark = !lit && inRect(dz, v.x, v.y), k = dark ? .2 : .07;
+      const gr = g.createRadialGradient(v.x, v.y, .05, v.x, v.y, v.range);
+      gr.addColorStop(0, `rgba(255,244,214,${k})`); gr.addColorStop(.6, `rgba(255,236,190,${k * .45})`); gr.addColorStop(1, 'rgba(255,230,180,0)');
+      g.fillStyle = gr; polyPath(g, cones[i]); g.fill();
+    });
+    g.restore();
+    for (const [x, y] of (lv.def.zoneLights || [])) R.drawFixture(g, x, y, lit);
 
     // Sichtkegel: vorn voll (sieht alles), hinten gestreift (sieht nur Aufrechte)
     views.forEach((v, i) => {
@@ -3042,14 +3226,25 @@ else window.LEVEL = LEVEL;
     drawPaths(g, P, now);
     run.gs.forEach((G, i) => {
       if (!G.active || !G.down || G.carriedBy >= 0) return;
-      R.drawLying(g, G.x, G.y, G.ang, G.outfitTaken ? Object.assign({}, R.guardLook(lv, i), { body: '#cfc6b8', sleeve: '#cfc6b8', apron: null }) : R.guardLook(lv, i), G.tied, G.hidden ? .35 : 1);
+      const fp = R.fallP(G, run.t), base = G.hidden ? .35 : 1;
+      const tier = run.crew.find(c => c.busy && c.busy.type === 'tie' && c.busy.g === i);
+      const dresser = run.crew.find(c => c.busy && c.busy.type === 'dress' && c.busy.g === i);
+      const tied = G.tied ? true : tier ? R.busyP(tier.busy, run.t) : false;
+      const o = { stretch: .55 + .45 * fp, breath: Math.sin(run.t / (G.tied ? 46 : 30)), snap: R.snapP(G, run.t) };
+      if (fp < 1) R.drawPerson(g, G.x, G.y, G.ang, 0, R.guardLook(lv, i), { alpha: base * (1 - fp), noLight: true });
+      R.drawLying(g, G.x, G.y, G.ang, G.outfitTaken ? takenLook(i) : R.guardLook(lv, i), tied, base * (fp < 1 ? Math.max(.15, fp) : 1), o);
+      if (dresser && !G.outfitTaken) {
+        const e = R.ease(R.busyP(dresser.busy, run.t));
+        if (e > 0) { g.save(); circle(g, G.x, G.y, .1 + e * .5); g.clip(); R.drawLying(g, G.x, G.y, G.ang, takenLook(i), tied, base, o); g.restore(); }
+      }
+      R.drawImpact(g, G.x, G.y, G.ang, run.t - G.downAt);
     });
     run.gs.forEach((G, i) => {
       if (!G.active || G.down) return;
-      R.drawPerson(g, G.x, G.y, G.ang, G.moving ? G.walk : 0, R.guardLook(lv, i), { run: G.purpose === 'chase' });
+      R.drawPerson(g, G.x, G.y, G.ang, G.moving ? G.walk : 0, R.guardLook(lv, i), { run: G.purpose === 'chase', scale: .82 + .18 * R.riseP(G, run.t) });
     });
     run.crew.forEach((c, i) => {
-      const lk = c.disguise ? Object.assign({}, R.LOOK[c.id], { body: '#4f8f86', sleeve: '#447d75', apron: '#d8e6e2', scarf: null }) : R.LOOK[c.id];
+      const lk = c.disguise ? Object.assign({}, R.LOOK[c.id], KITTEL) : R.LOOK[c.id];
       const inVent = C.kindAt(lv, c.tile[0], c.tile[1]) === 'vent';
       if (i === sel && mode === 'play') {
         g.strokeStyle = rgba('#eef3fa', .6 + .3 * pulse); g.lineWidth = 3 * P; circle(g, c.x, c.y, .47); g.stroke();
@@ -3059,9 +3254,10 @@ else window.LEVEL = LEVEL;
       }
       g.strokeStyle = rgba(lk.av, i === sel ? .95 : .6); g.lineWidth = (i === sel ? 2.5 : 1.5) * P; circle(g, c.x, c.y, .38); g.stroke();
       if (c.caught) return;
-      R.drawPerson(g, c.x, c.y, c.ang, c.move ? c.dist * Math.PI * 1.4 : 0, lk, {
-        alpha: inVent ? .45 : c.hidden ? .6 : 1, scale: c.crouch ? .86 : 1.02, run: c.run, loot: run.item.taken && run.item.by === i
-      });
+      const po = c.busy ? R.busyPose(c.busy, run.t, c.tool === 'brecheisen' && !c.busy.bolt) : null;
+      const opt = { alpha: inVent ? .45 : c.hidden ? .6 : 1, scale: c.crouch ? .86 : 1.02, run: c.run, loot: run.item.taken && run.item.by === i, pose: po };
+      if (c.busy && c.busy.type === 'dress') R.drawDress(g, c.x, c.y, c.ang, 0, lk, Object.assign({}, R.LOOK[c.id], KITTEL), R.busyP(c.busy, run.t), opt);
+      else R.drawPerson(g, c.x, c.y, c.ang, c.move ? c.dist * Math.PI * 1.4 : 0, lk, opt);
       if (c.carrying >= 0) { const B = run.gs[c.carrying]; g.save(); g.translate(c.x - Math.cos(c.ang) * .05, c.y - Math.sin(c.ang) * .05); g.scale(.78, .78); R.drawLying(g, 0, 0, c.ang + Math.PI / 2, R.guardLook(lv, c.carrying), B.tied, 1); g.restore(); }
     });
     for (const th of run.throws) {
@@ -3393,8 +3589,7 @@ else window.LEVEL = LEVEL;
     if (!c.caught && !c.busy) return;
     const [sx, sy] = toScreen(c.x, c.y - .78);
     if (c.caught) { badge(g, sx, sy, '×', '#ff4a3d'); return; }
-    const b = c.busy, dur = b.type === 'lock' ? 120 : b.type === 'tie' ? 90 : 24;
-    badge(g, sx, sy, '•', '#eef3fa', 1 - (b.until - run.t) / dur, '#58e0a0');
+    badge(g, sx, sy, '•', '#eef3fa', R.busyP(c.busy, run.t), '#58e0a0');
   }
 
   /* ---------- Aktionsrad am Ziel: zeigt, was die ganze Crew damit machen kann ---------- */
@@ -3754,7 +3949,7 @@ else window.LEVEL = LEVEL;
   function statusOf(c, i) {
     if (c.caught) return 'geschnappt';
     if (sd) return sd[i].length ? sd[i].length + (sd[i].length > 1 ? ' Schritte geplant' : ' Schritt geplant') : 'noch nichts geplant';
-    if (c.busy) return c.busy.type === 'lock' ? 'knackt Schloss' : c.busy.type === 'tie' ? 'fesselt' : c.busy.type === 'pick' ? 'hebt auf' : 'schlägt zu';
+    if (c.busy) return ({ lock: c.busy.bolt ? 'schiebt den Riegel' : c.tool === 'brecheisen' ? 'bricht auf' : 'knackt Schloss', tie: 'fesselt', pick: 'hebt auf', ko: 'schlägt zu', dress: 'zieht sich um', fuse: 'am Sicherungskasten', take: 'nimmt das Bild ab', radio: 'am Radio', door: 'an der Tür' })[c.busy.type] || 'beschäftigt';
     const inVent = C.kindAt(run.lv, c.tile[0], c.tile[1]) === 'vent';
     const bits = [];
     if (inVent) bits.push('im Schacht'); else if (c.hidden) bits.push('versteckt');
@@ -4578,7 +4773,7 @@ else window.LEVEL = LEVEL;
   new ResizeObserver(() => resize()).observe(stage);
 
   /* ---------- Hauptschleife ---------- */
-  let last = performance.now(), acc = 0;
+  let last = performance.now(), acc = 0, dbgFrozen = false;
   // Solange du ein Ziel anschaust (Rad offen), eine Figur ziehst oder eine Münze zielst, steht die Zeit
   const held = () => prefs.hold && mode === 'play' && !sd && (!!ring || !!aim || !!(gesture && gesture.type === 'drag'));
   // Schritte hören: pro Feld ein Tritt, die ausgewählte Figur lauter
@@ -4600,7 +4795,7 @@ else window.LEVEL = LEVEL;
     app.classList.toggle('briefing', mode === 'brief');
     computePreview(now);
     if (lastPlan && lastPlan.endT == null && !sd && run && !run.crew.some(c => c.planned)) lastPlan.endT = run.t;
-    if (mode === 'play' && !sd && !tipOpen && run.status === 'play' && !held()) {
+    if (mode === 'play' && !sd && !tipOpen && run.status === 'play' && !held() && !dbgFrozen) {
       // Reflex-Zeitlupe: kurz nach dem Entdecktwerden läuft die Zeit langsamer
       const left = slowUntil - now, slow = left > 0 ? (left > 400 ? .3 : .3 + .7 * (1 - left / 400)) : 1;
       acc += dt * slow; const st = 1 / rate();
@@ -4625,7 +4820,7 @@ else window.LEVEL = LEVEL;
     requestAnimationFrame(frame);
   }
   if (window.__debug) window.__dbg_aim = () => aim;
-  if (window.__debug) window.__dbg = { dropOn, thingAt, rewind, get rewindBuf() { return rewindBuf; }, get slowUntil() { return slowUntil; }, get dragPreview() { return dragPreview; }, get run() { return run; }, cam, clampCam, setMode, get mode() { return mode; }, onTap, toScreen, select, get sd() { return sd; }, prefs, get ring() { return ring; }, get preview() { return preview; }, get lastPlan() { return lastPlan; }, backToPlan, get sdCont() { return sdCont; }, get sdSel() { return sdSel; }, set scrub(v) { scrubT = v; syncScrub(); }, audio: () => ({ state: Sfx.ac && Sfx.ac.state, music: !!Music.out, stage: Music.stage, beat: Music.beat, muffled: Music.muffled }) };
+  if (window.__debug) window.__dbg = { dropOn, thingAt, rewind, get rewindBuf() { return rewindBuf; }, get slowUntil() { return slowUntil; }, get dragPreview() { return dragPreview; }, get run() { return run; }, cam, clampCam, setMode, get mode() { return mode; }, onTap, toScreen, select, get sd() { return sd; }, prefs, get ring() { return ring; }, get preview() { return preview; }, get lastPlan() { return lastPlan; }, backToPlan, get sdCont() { return sdCont; }, get sdSel() { return sdSel; }, set scrub(v) { scrubT = v; syncScrub(); }, freeze(v) { dbgFrozen = v !== false; }, tick(n) { for (let i = 0; i < n && run.status === 'play'; i++) { run.step(); if (run.events.length) handleEvents(); } }, audio: () => ({ state: Sfx.ac && Sfx.ac.state, music: !!Music.out, stage: Music.stage, beat: Music.beat, muffled: Music.muffled }) };
   introCards(); newRun(); syncPause();
   requestAnimationFrame((t) => { last = t; frame(t); });
 })();
