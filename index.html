@@ -536,7 +536,8 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   const RADIO = 240;          // so lange muss eine Wache dich sehen, um Alarm zu funken
   const ALARM_TIME = 1800;
   const WAKE = 2700;          // Betäubte wachen nach 45 s auf, wenn nicht gefesselt
-  const KO_TIME = 24, PICK_TIME = 16, TIE_TIME = 90, LOCK_TIME = 120;
+  // Handgriffe dauern merkbar, aber nicht lang (Ticks bei 60/s): Überwältigen und zu Boden lassen, Schultern, Ablegen, Fesseln
+  const KO_TIME = 48, PICK_TIME = 40, DROP_TIME = 24, TIE_TIME = 90, LOCK_TIME = 120;
   const COIN_FLIGHT = 20, COIN_RANGE = 5, COIN_HEAR = 4.5;
   // Werkzeuge: Grunddauer (Ticks) und Lautstärke. Die Figur verändert beides mit ihren Werten.
   const TOOLS = {
@@ -695,7 +696,8 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   // Wo darf eine Münze landen? Auf Boden, nicht auf Kisten, Statuen, Autos, Büschen
   const LAND_OK = new Set(['floor', 'grass', 'path', 'street', 'door']);
   // Tür, die man auf- und zumachen kann: normale Türen und geknackte Schlösser
-  const isDoor = (lv, x, y, w) => { const k = kindAt(lv, x, y); return k === 'door' || (k === 'locked' && !!w && w.opened.has(idx(lv, x, y))); };
+  // Tür zum Auf- und Zumachen: normale Türen und entriegelte. Aufgebrochene hängen schief im Rahmen und bleiben offen.
+  const isDoor = (lv, x, y, w) => { const k = kindAt(lv, x, y), i = idx(lv, x, y); return k === 'door' || (k === 'locked' && !!w && w.opened.has(i) && !(w.broken && w.broken.includes(i))); };
   function guardWalkable(lv, x, y, w) {
     const k = kindAt(lv, x, y);
     if (k === 'locked') return !!(w && w.opened.has(idx(lv, x, y)));
@@ -900,6 +902,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
     this.radioOn = [];     // Feldindizes laufender Radios: Musik lockt eine Wache und übertönt Schritte in der Nähe
     this.dark = false;    // Sicherungskasten: Licht in der Zone aus
     this.darkAt = -1;     // wann das Licht zuletzt umgeschaltet wurde (Flackern in der Grafik)
+    this.broken = [];     // aufgebrochene Türen (Feldindizes): stehen offen und lassen sich nicht mehr schließen
     this.lockDone = {};   // angefangene Schlösser: Feldindex -> schon geschaffte Ticks   // geworfene Münzen, die noch am Boden liegen
     this.signals = [];    // Showdown-Signale (A, B, …), die schon gegeben wurden
     this.closed = new Set((def.closedDoors || []).map(([x, y]) => idx(lv, x, y)));   // geschlossene Türen
@@ -1622,7 +1625,8 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
     }
     if (o.type === 'drop') {
       if (c.carrying < 0) return { ok: false, why: 'Trägt niemanden.' };
-      this.dropBody(ci); return { ok: true, instant: true };
+      c.path = []; c.busy = { t0: this.t, type: 'drop', until: this.t + DROP_TIME };
+      return { ok: true };
     }
     if (o.type === 'coin') {
       if (c.coins <= 0) return { ok: false, why: this.coinsOnFloor.length ? 'Die Münze liegt noch am Boden. Erst aufheben.' : 'Keine Münze dabei.' };
@@ -1707,7 +1711,8 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       if (c.busy.type === 'lock' && this.t >= c.busy.pulseAt) { c.busy.pulseAt = this.t + PICK_PULSE; this.noise(c.busy.x + 0.5, c.busy.y + 0.5, c.busy.noise, ci); }
       if (this.t >= c.busy.until) {
         const b = c.busy; c.busy = null;
-        if (b.type === 'pick') { c.carrying = b.g; this.gs[b.g].carriedBy = ci; this.gs[b.g].hidden = false; this.events.push({ type: 'pick', c: ci }); }
+        if (b.type === 'drop') { if (c.carrying >= 0) this.dropBody(ci); }
+        else if (b.type === 'pick') { c.carrying = b.g; this.gs[b.g].carriedBy = ci; this.gs[b.g].hidden = false; this.events.push({ type: 'pick', c: ci }); }
         else if (b.type === 'tie') { this.gs[b.g].tied = true; this.gs[b.g].tiedAt = this.t; c.ties--; this.stats.tie++; this.events.push({ type: 'tie', c: ci, left: c.ties }); }
         else if (b.type === 'fuse') {
           this.dark = !this.dark; this.darkAt = this.t;
@@ -1736,7 +1741,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
             this.events.push({ type: 'caseOpen', c: ci, x: b.x, y: b.y, broke });
             if (!this.item.taken) { this.item.taken = true; this.item.by = ci; this.events.push({ type: 'item', c: ci }); }
           } else {
-            if (broke) { this.closed.delete(li); this.doorWas[li] = true; } else this.closed.add(li);   // aufgebrochen: offen und auffällig
+            if (broke) { this.closed.delete(li); this.doorWas[li] = true; this.broken.push(li); } else this.closed.add(li);   // aufgebrochen: offen, auffällig, nicht mehr zu schließen
             this.events.push({ type: 'unlock', c: ci, x: b.x, y: b.y, broke, bolt: !!b.bolt });
           }
         }
@@ -1777,20 +1782,23 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
         } else if (o.type === 'ko') {
           const i = o.g;
           for (const m of team) { if (m !== c) { m.order = null; m.path = []; m.waitKo = 0; m.busy = { t0: this.t, type: 'ko', until: this.t + m.koTime }; } }
-          c.order = null; c.waitKo = 0;
+          c.order = null; c.waitKo = 0; c.run = false;
           G.down = true; G.downAt = this.t; G.stirred = false; G.wakeAt = this.t + WAKE; G.mode = 'go'; G.path = []; G.step = null; G.purpose = null; G.radioOn = false; G.sus = 0; G.happyUntil = 0;
           G.x = Math.floor(G.x) + 0.5; G.y = Math.floor(G.y) + 0.5;
           // Eingesteckte Münzen fallen heraus
           for (; G.coins > 0; G.coins--) this.coinsOnFloor.push(tileOf([G.x, G.y]));
           c.busy = { t0: this.t, type: 'ko', until: this.t + c.koTime };
           this.events.push({ type: 'ko', c: ci, g: i }); this.stats.ko++;
-        } else if (o.type === 'pick') { c.order = null; c.busy = { t0: this.t, type: 'pick', g: o.g, until: this.t + PICK_TIME }; }
-        else { c.order = null; c.busy = { t0: this.t, type: 'tie', g: o.g, until: this.t + TIE_TIME }; }
+        } else if (o.type === 'pick') { c.order = null; c.run = false; c.busy = { t0: this.t, type: 'pick', g: o.g, until: this.t + Math.round(PICK_TIME / Math.sqrt(c.strength || 1)) }; }
+        else { c.order = null; c.run = false; c.busy = { t0: this.t, type: 'tie', g: o.g, until: this.t + TIE_TIME }; }
       } else if (!c.move && (o.repath-- <= 0 || !c.path.length)) {
         const gt = tileOf([G.x, G.y]);
         // Schräg daneben reicht zum Tragen und Fesseln; zum Betäuben nur mit langer Reichweite
-        const goals = this.besides(ci, gt, o.type !== 'ko' || c.reach >= 1.42);
-        if (crewWalkable(lv, gt[0], gt[1], c, this)) goals.push(gt);
+        let goals = this.besides(ci, gt, o.type !== 'ko' || c.reach >= 1.42);
+        const into = crewWalkable(lv, gt[0], gt[1], c, this);
+        if (into) goals.push(gt);
+        // Schon neben ihr, aber sie läuft davon: direkt hinterher in ihr Feld, statt stehen zu bleiben (sonst ruckt die Verfolgung)
+        if (into && goals.some(g => g[0] === c.tile[0] && g[1] === c.tile[1])) goals = [gt];
         const p = this.crewPath(ci, goals);
         c.path = p || []; o.repath = 10;
         if (!p) { c.order = null; this.events.push({ type: 'skip', c: ci, why: 'Kein Weg zu ' + gname(this, o.g) + '.' }); }
@@ -1854,7 +1862,8 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
         if (ck >= 0 && c.traits.includes('muenze')) { this.coinsOnFloor.splice(ck, 1); c.coins++; this.events.push({ type: 'coinPick', c: ci }); }
         if (this.closed.has(idx(lv, c.tile[0], c.tile[1]))) this.setDoor(c.tile[0], c.tile[1], false, ci);
         this.arrive(ci);
-        if (!c.path.length) { c.run = false; if (c.order && c.order.type === 'move') c.order = null; }
+        const chasing = c.order && (c.order.type === 'ko' || c.order.type === 'pick' || c.order.type === 'tie');
+        if (!c.path.length && !chasing) { c.run = false; if (c.order && c.order.type === 'move') c.order = null; }
       }
     }
     this.syncCrew(ci);
@@ -1870,7 +1879,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   // Tür umstellen. by: Crew-Index (merken für die Wachen) oder -1 (Wache macht sie beim Durchgehen auf)
   Run.prototype.setDoor = function (x, y, close, by) {
     const i = idx(this.lv, x, y), was = this.closed.has(i);
-    if (was === close) return;
+    if (was === close || (close && this.broken.includes(i))) return;
     if (close) this.closed.add(i); else this.closed.delete(i);
     if (by >= 0) {
       if (this.doorWas[i] == null) this.doorWas[i] = was;
@@ -2003,7 +2012,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   };
 
   const api = {
-    TPS, SPEED, NEAR, RADIO, TAKE_TIME, RADIO_NOISE, RADIO_MASK, CARPET, CARPET_COIN, CHECK_TIME, ALARM_TIME, EXPLICIT, routeOk, isDoor, TOOLS, BOLT, throwClear, LAND_OK, soundField, WHISTLE_R: WHISTLE_PATH, WAKE, STIR, COIN_RANGE, COIN_HEAR, REACH, DIRS, ACTIONS, TILE_NEEDS, TRAIT_NAME, has,
+    TPS, SPEED, NEAR, RADIO, TAKE_TIME, KO_TIME, PICK_TIME, DROP_TIME, TIE_TIME, RADIO_NOISE, RADIO_MASK, CARPET, CARPET_COIN, CHECK_TIME, ALARM_TIME, EXPLICIT, routeOk, isDoor, TOOLS, BOLT, throwClear, LAND_OK, soundField, WHISTLE_R: WHISTLE_PATH, WAKE, STIR, COIN_RANGE, COIN_HEAR, REACH, DIRS, ACTIONS, TILE_NEEDS, TRAIT_NAME, has,
     parseLevel, kindAt, opaque, guardWalkable, crewWalkable, bfs, path8, tileCost, guardState, lineOfSight, conePoly, tileOf, Run, HIDE
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -2064,15 +2073,15 @@ const LEVEL = {
   crew: [
     { id: 'leo', name: 'Leo', role: 'Gentleman-Dieb', traits: ['schmal', 'dietrich', 'muenze'], coins: 1, ties: 2,
       move: { sneak: 22, run: 14, carry: 28, climb: 50 }, noise: 3,
-      stats: { pickSpeed: 1.35, pickQuiet: 1.3, notice: 1.0, koTime: 24, throwRange: 5.5 },
+      stats: { pickSpeed: 1.35, pickQuiet: 1.3, notice: 1.0, koTime: 48, throwRange: 5.5 },
       profile: 'Solide. Trägt Bewusstlose am besten.' },
     { id: 'mara', name: 'Mara', role: 'Akrobatin', traits: ['schmal', 'geschickt', 'pfiff'], ties: 1,
       move: { sneak: 18, run: 11, carry: 42, climb: 30, vent: 22 }, noise: 2,
-      stats: { notice: 0.8, koTime: 18, throwRange: 4.5 },
+      stats: { notice: 0.8, koTime: 40, throwRange: 4.5 },
       profile: 'Schnell und leise, klettert flink. Trägt schwer.' },
     { id: 'bruno', name: 'Bruno', role: 'Der Brecher', traits: ['kraeftig', 'brecheisen'], ties: 3, strength: 2, reach: 1.3,
       move: { sneak: 26, run: 15, carry: 22, climb: 60 }, noise: 4,
-      stats: { notice: 1.3, koTime: 14, throwRange: 6, pickSpeed: 1.0, pickQuiet: 1.0 },
+      stats: { notice: 1.3, koTime: 32, throwRange: 6, pickSpeed: 1.0, pickQuiet: 1.0 },
       profile: 'Stark und schnell im Zupacken. Schafft Zähe allein, trägt mühelos. Aber laut, auffällig und zu breit für Fenster, Schächte und Schränke.' }
   ],
   guards: [
@@ -2484,6 +2493,29 @@ else window.LEVEL = LEVEL;
     g.fillStyle = '#7a5230';
     if (h) g.fillRect(x + .04, y + .5, .12, .46); else g.fillRect(x + .5, y + .04, .46, .12);
   }
+  // Aufgebrochene Tür: Türblatt hängt schief nach innen, Rahmen gesplittert, das Schloss liegt am Boden
+  function brokenDoor(g, lv, x, y) {
+    const h = doorSide(lv, x, y) === 'h';
+    g.fillStyle = '#3a3029'; g.fillRect(x + .04, y + .04, .92, .92);
+    g.fillStyle = 'rgba(200,190,170,.35)'; g.fillRect(x + .1, y + .1, .8, .8);
+    // Türblatt: an einer Angel, weit aufgeschwungen und verkantet
+    g.save(); g.translate(h ? x + .08 : x + .5, h ? y + .5 : y + .08); g.rotate(h ? .55 : -.55 + Math.PI / 2);
+    const gr = g.createLinearGradient(0, -.06, 0, .06); gr.addColorStop(0, '#8a5d36'); gr.addColorStop(1, '#4e321b');
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(.03, -.02, .86, .14);
+    g.fillStyle = gr; g.fillRect(0, -.06, .86, .12);
+    g.strokeStyle = '#2b1a0c'; g.lineWidth = .02; g.strokeRect(0, -.06, .86, .12);
+    // ausgerissene Kante
+    g.fillStyle = '#e8c48a'; g.beginPath(); g.moveTo(.86, -.06); g.lineTo(.78, -.01); g.lineTo(.88, .02); g.lineTo(.8, .06); g.lineTo(.86, .06); g.closePath(); g.fill();
+    g.restore();
+    // Splitter um den Rahmen
+    g.fillStyle = '#e8c48a';
+    for (let i = 0; i < 7; i++) {
+      const a = i * 2.1, px = x + .5 + Math.cos(a) * (.18 + (i % 3) * .1), py = y + .5 + Math.sin(a) * (.18 + (i % 2) * .12), r = .035 + (i % 2) * .02;
+      g.beginPath(); g.moveTo(px - r, py); g.lineTo(px, py - r * .5); g.lineTo(px + r * 1.4, py + r * .3); g.closePath(); g.fill();
+    }
+    // Schloss am Boden
+    g.fillStyle = '#e0b85c'; g.save(); g.translate(h ? x + .66 : x + .3, h ? y + .78 : y + .68); g.rotate(.6); rrect(g, -.08, -.06, .16, .12, .025); g.fill(); g.restore();
+  }
   function pedestal(g, cx, cy, P) {
     g.fillStyle = 'rgba(130,20,30,.6)'; circle(g, cx, cy, .46); g.fill();
     const gr = g.createRadialGradient(cx - .08, cy - .08, 0, cx, cy, .3); gr.addColorStop(0, '#efe7d8'); gr.addColorStop(1, '#8f8679');
@@ -2767,7 +2799,7 @@ else window.LEVEL = LEVEL;
     g.fillStyle = '#fff'; circle(g, x - .05, y - .09, .025); g.fill();
   }
 
-  root.Render = { rgba, shade, rrect, ell, circle, polyPath, buildStatic, openDoor, closedDoor, drawPerson, drawLying, drawEgg, drawCase, drawPainting, LOOK, guardLook,
+  root.Render = { rgba, shade, rrect, ell, circle, polyPath, buildStatic, openDoor, closedDoor, drawPerson, drawLying, drawEgg, drawCase, brokenDoor, drawPainting, LOOK, guardLook,
     busyP, busyPose, fallP, snapP, riseP, drawImpact, drawDress, lightPoly, lightBlocks, drawFixture, ease, FALL, SNAP, RISE, IMPACT, get softMode() { return canFilter == null ? 'unbekannt' : canFilter ? 'filter' : 'kopien'; } };
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -3163,7 +3195,7 @@ else window.LEVEL = LEVEL;
     worldTransform(g);
     g.imageSmoothingEnabled = true;
     g.drawImage(staticCv, 0, 0, lv.W, lv.H);
-    for (const i of run.opened) R.openDoor(g, lv, i % lv.W, (i / lv.W) | 0);
+    for (const i of run.opened) (run.broken.includes(i) ? R.brokenDoor : R.openDoor)(g, lv, i % lv.W, (i / lv.W) | 0);
     for (const i of run.closed) R.closedDoor(g, lv, i % lv.W, (i / lv.W) | 0);
     const alarm = run.alarm(), pulse = .5 + .5 * Math.sin(now / 220);
     const views = run.gs.map((G, i) => (G.active && !G.down) ? run.viewer(i) : null);
@@ -3269,10 +3301,11 @@ else window.LEVEL = LEVEL;
       g.strokeStyle = rgba(lk.av, i === sel ? .95 : .6); g.lineWidth = (i === sel ? 2.5 : 1.5) * P; circle(g, c.x, c.y, .38); g.stroke();
       if (c.caught) return;
       const po = c.busy ? R.busyPose(c.busy, run.t, c.tool === 'brecheisen' && !c.busy.bolt) : null;
+      const ang = faceOf(i, c.ang, now);
       const opt = { alpha: inVent ? .45 : c.hidden ? .6 : 1, scale: c.crouch ? .86 : 1.02, run: c.run, loot: run.item.taken && run.item.by === i, pose: po };
-      if (c.busy && c.busy.type === 'dress') R.drawDress(g, c.x, c.y, c.ang, 0, lk, Object.assign({}, R.LOOK[c.id], KITTEL), R.busyP(c.busy, run.t), opt);
-      else R.drawPerson(g, c.x, c.y, c.ang, c.move ? c.dist * Math.PI * 1.4 : 0, lk, opt);
-      if (c.carrying >= 0) { const B = run.gs[c.carrying]; g.save(); g.translate(c.x - Math.cos(c.ang) * .05, c.y - Math.sin(c.ang) * .05); g.scale(.78, .78); R.drawLying(g, 0, 0, c.ang + Math.PI / 2, R.guardLook(lv, c.carrying), B.tied, 1); g.restore(); }
+      if (c.busy && c.busy.type === 'dress') R.drawDress(g, c.x, c.y, ang, 0, lk, Object.assign({}, R.LOOK[c.id], KITTEL), R.busyP(c.busy, run.t), opt);
+      else R.drawPerson(g, c.x, c.y, ang, c.move ? c.dist * Math.PI * 1.4 : 0, lk, opt);
+      if (c.carrying >= 0) { const B = run.gs[c.carrying]; g.save(); g.translate(c.x - Math.cos(ang) * .05, c.y - Math.sin(ang) * .05); g.scale(.78, .78); R.drawLying(g, 0, 0, ang + Math.PI / 2, R.guardLook(lv, c.carrying), B.tied, 1); g.restore(); }
     });
     for (const th of run.throws) {
       const p = Math.min(1, (run.t - th.t0) / (th.land - th.t0));
@@ -3953,7 +3986,7 @@ else window.LEVEL = LEVEL;
       ['Unauffällig', dots(c.notice, 1.3, .7)],
       ['Tragen', dots(sp.carry, 46, 26)],
       ['Klettern', dots(sp.climb, 60, 25)],
-      ['Betäuben', dots(c.koTime, 30, 14) + ' Kraft ' + c.strength],
+      ['Betäuben', dots(c.koTime, 56, 28) + ' Kraft ' + c.strength],
       ['Wurfweite', dots(c.throwRange, 3.5, 6)],
       pk ? ['Knacken', dots(c.pickSpeed, .7, 1.5) + ' ' + pk.tool + ', ' + secs(pk.time) + ', ' + loudWord(pk.noise)] : null,
       ['Dabei', c.ties + ' Kabelbinder' + (c.coins ? ', 1 Münze' : '')]
@@ -4064,6 +4097,15 @@ else window.LEVEL = LEVEL;
   function toast(text, bad, ms) {
     const t = $('#toast'); t.textContent = text; t.className = 'on' + (bad ? ' bad' : '');
     clearTimeout(toastT); toastT = setTimeout(() => { t.className = ''; }, ms || 2200);
+  }
+  // Blickrichtung der Crew weich nachführen (nur Bild): Richtungswechsel von Feld zu Feld wirken sonst ruckig
+  const faceAng = [], faceAt = [];
+  function faceOf(i, target, now) {
+    if (faceAng[i] == null || mode !== 'play' || !faceAt[i] || now - faceAt[i] > 250) { faceAng[i] = target; faceAt[i] = now; return target; }
+    let d = target - faceAng[i]; d = Math.atan2(Math.sin(d), Math.cos(d));
+    const k = 1 - Math.exp(-(now - faceAt[i]) / 70);
+    faceAng[i] += d * k; faceAt[i] = now;
+    return faceAng[i];
   }
   function ripple(x, y, col, r0, r1, dur) { fx.ripples.push({ x, y, col, r0, r1, dur, t0: performance.now() }); }
   // Schallwelle: läuft genau bis zur Hörweite aus, damit man lernt, wie weit ein Geräusch trägt
@@ -4442,7 +4484,8 @@ else window.LEVEL = LEVEL;
           const what = ev.bolt ? ' schiebt den Riegel zurück' : ev.isCase ? (brk ? ' holt mit dem Brecheisen aus' : ' öffnet das Schloss der Vitrine') : (brk ? ' bricht die Tür auf' : ' knackt das Schloss');
           toast(c.name + what + ' (' + (ev.bolt ? '' : pk.tool + ', ') + secs(pk.time) + ') …', false, 1800); break;
         }
-        case 'unlock': Sfx.unlock(); toast(ev.broke ? 'Tür aufgebrochen. Sie steht offen, und das fällt auf.' : ev.bolt ? 'Riegel auf. Die Tür ist noch zu: durchgehen oder „Aufmachen“.' : 'Schloss offen. Die Tür ist noch zu: durchgehen oder „Aufmachen“.', false, 2600); break;
+        case 'unlock': Sfx.unlock(); if (ev.broke) { ripple(ev.x + .5, ev.y + .5, '#e8c48a', .2, 1.4, 500); buzz([40, 30, 40]); }
+          toast(ev.broke ? 'Tür aufgebrochen: Sie steht jetzt offen und geht nicht mehr zu. Wer sie sieht, kommt nachsehen.' : ev.bolt ? 'Riegel auf. Die Tür ist noch zu: durchgehen oder „Aufmachen“.' : 'Schloss offen. Die Tür ist noch zu: durchgehen oder „Aufmachen“.', false, 2600); break;
         case 'caseOpen': if (ev.broke) { Sfx.unlock(); buzz([60, 40, 60]); toast('Klirr! Das Glas ist hin. Das hat man gehört.', true, 2600); } break;
         case 'lockPaused': toast('Knacken unterbrochen, noch ' + secs(ev.left) + '. Der Fortschritt bleibt.', false, 2400); break;
         case 'throw': Sfx.throw(); break;
