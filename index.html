@@ -2959,7 +2959,7 @@ else window.LEVEL = LEVEL;
       sim.step();
       const t = sim.t - t0;
       for (let ci = 0; ci < n; ci++) { mark(ci, t); if (doneAt[ci] < 0 && plans[ci].length && !busy(sim.crew[ci])) doneAt[ci] = t; }
-      if (i % 3 === 0) sim.crew.forEach((c, ci) => { if (!c.caught && plans[ci].length && (doneAt[ci] < 0 || t <= doneAt[ci] + 3)) trail[ci].push([c.x, c.y, 0, c.run ? 1 : 0, c.hidden ? 1 : 0]); });
+      if (i % 3 === 0) sim.crew.forEach((c, ci) => { if (!c.caught && plans[ci].length && (doneAt[ci] < 0 || t <= doneAt[ci] + 3)) trail[ci].push([c.x, c.y, 0, c.run ? 1 : 0, c.hidden ? 1 : 0, t]); });
       for (const ev of sim.events) {
         const sv = SEV[ev.type]; if (!sv) continue;
         const rec = { type: ev.type, sev: sv, t, c: ev.c != null ? ev.c : -1, g: ev.g != null ? ev.g : -1, why: ev.why || '' };
@@ -2982,7 +2982,10 @@ else window.LEVEL = LEVEL;
     }
     if (!end) end = sim.t - t0;
     plans.forEach((l, ci) => l.forEach((o, k) => { const nx = steps[ci][k + 1]; steps[ci][k].end = nx && nx.start >= 0 ? nx.start : doneAt[ci] >= 0 ? doneAt[ci] : end; }));
-    preview = { issue, warn, end, steps, frames, trail, last: frames[frames.length - 1].t, lost: sim.status === 'lost' };
+    // Wo eine Figur einer Person folgt, verrät ihr Weg, wohin die Person läuft: diese Abschnitte bleiben unsichtbar
+    const hide = sd.map((l, ci) => { const tn = taintOf(l); return l.map((o, k) => tn[k] && steps[ci][k] && steps[ci][k].start >= 0 ? [steps[ci][k].start, steps[ci][k].end] : null).filter(Boolean); });
+    const hidden = (ci, t) => hide[ci] && hide[ci].some(([a, b]) => t >= a && t <= b);
+    preview = { issue, warn, end, steps, frames, trail, hide, hidden, last: frames[frames.length - 1].t, lost: sim.status === 'lost' };
     if (scrubT > preview.last) scrubT = preview.last;
     syncScrub();
   }
@@ -2999,8 +3002,9 @@ else window.LEVEL = LEVEL;
     preview.trail.forEach((tr, ci) => {
       const col = PLAN_COL[ci % PLAN_COL.length], mine = ci === sel;
       for (let k = 1; k < tr.length; k++) {
-        const [x, y, seen, rn, hid] = tr[k], [px, py] = tr[k - 1];
+        const [x, y, seen, rn, hid, t] = tr[k], [px, py] = tr[k - 1];
         if (Math.hypot(x - px, y - py) < .01 && !seen) continue;
+        if (preview.hidden(ci, t)) continue;
         g.fillStyle = seen ? rgba('#ff4a3d', .95) : rgba(col, mine ? .85 : .5);
         const r = seen ? .085 : rn ? .075 : .045;
         circle(g, x, y, hid ? r * .7 : r); g.fill();
@@ -3009,7 +3013,7 @@ else window.LEVEL = LEVEL;
     // Zeitreise: alle so zeigen, wie sie zum gewählten Zeitpunkt stehen
     if (scrubT >= 0) {
       const F = frameAt(scrubT);
-      F.crew.forEach((s, ci) => { if (s[5]) return; R.drawPerson(g, s[0], s[1], s[2], 0, R.LOOK[run.crew[ci].id], { alpha: s[3] ? .45 : .85, scale: s[4] ? .86 : 1.02 }); });
+      F.crew.forEach((s, ci) => { if (s[5] || preview.hidden(ci, F.t)) return; R.drawPerson(g, s[0], s[1], s[2], 0, R.LOOK[run.crew[ci].id], { alpha: s[3] ? .45 : .85, scale: s[4] ? .86 : 1.02 }); });
       return;
     }
     // Probleme des eigenen Plans (Schritt geht nicht): Figur als Geist an der Stelle
@@ -3104,6 +3108,16 @@ else window.LEVEL = LEVEL;
   let lastPlan = null;
   const SIG_COL = { A: '#ff5ea8', B: '#5ef0ff', C: '#ffd36b', D: '#b9a6ff' };
   const STAY = ['coin', 'whistle', 'drop', 'wait', 'signal', 'waitsig'];   // Schritte, bei denen man stehen bleibt
+  // Schritte, deren Ort davon abhängt, wohin eine Person bis dahin läuft: der Schritt auf die Person selbst und alles,
+  // was dort beginnt, bis zum nächsten festen Ziel. Die Vorschau zeigt dafür nur die Linie zur Person, wie sie jetzt steht.
+  function taintOf(list) {
+    let open = false;
+    return list.map(o => {
+      if (o.g != null) { open = true; return true; }
+      if (open) { if (!STAY.includes(o.type)) open = false; return true; }
+      return false;
+    });
+  }
   const insertAt = (ci) => (ci === sel && sdSel >= 0 && sdSel < sd[ci].length) ? sdSel + 1 : sd[ci].length;
   function sdPush() { sdUndo.push(JSON.stringify({ sd, cont: sdCont })); if (sdUndo.length > 60) sdUndo.shift(); }
   const plannedDown = (g) => !!sd && sd.some(l => l.some(o => o.type === 'ko' && o.g === g));
@@ -3346,13 +3360,15 @@ else window.LEVEL = LEVEL;
     run.crew.forEach((c, i) => drawCrewTag(g, c, i));
     if (sd) {
       const used = new Map();
-      run.crew.forEach((c, ci) => chain(ci, sd[ci]).forEach((seg, k) => {
+      run.crew.forEach((c, ci) => { const tn = taintOf(sd[ci]); chain(ci, sd[ci]).forEach((seg, k) => {
         const [sx, sy] = toScreen(seg.to[0], seg.to[1]);
         const key = Math.round(sx / 6) + ',' + Math.round(sy / 6), n = used.get(key) || 0; used.set(key, n + 1);
         const bx = sx + 14, by = sy - 14 + n * 22, col = PLAN_COL[ci % PLAN_COL.length];
         const st = preview && preview.steps[ci] && preview.steps[ci][k];
         // Beschriftung: Schritt, Aktion, wann er fertig ist
-        const txt = (ci === sel || seg.o.type !== 'move' ? short(seg.o) + ' ' : '') + (st && st.end >= 0 ? secs(st.end) : '');
+        // Auf eine Person: nur wann es losgeht. Wann man sie erreicht, hängt davon ab, wohin sie läuft.
+        const when = !st || st.end < 0 ? '' : tn[k] ? (seg.o.g != null && st.start >= 0 ? 'ab ' + secs(st.start) : '') : secs(st.end);
+        const txt = (ci === sel || seg.o.type !== 'move' ? short(seg.o) + ' ' : '') + when;
         if (txt.trim()) {
           g.font = font(11); g.textAlign = 'left'; g.textBaseline = 'middle';
           const w = g.measureText(txt).width + 22;
@@ -3361,7 +3377,7 @@ else window.LEVEL = LEVEL;
         }
         numberBadge(g, bx, by, k + 1, col);
         if (ci === sel && k === sdSel) { g.strokeStyle = '#eef3fa'; g.lineWidth = 2; circle(g, bx, by, 12.5); g.stroke(); }
-      }));
+      }); });
       // Erstes Problem als Warnschild
       const is = preview && preview.warn;
       if (is && scrubT < 0) {
@@ -3419,6 +3435,12 @@ else window.LEVEL = LEVEL;
         if (STAY.includes(s.o.type)) continue;
         const p = pathFrom(ci, C.tileOf(s.from), C.tileOf(s.to), s.o.via);
         if (p) footprints(g, s.from, p, { col, alpha: .85, risk: true, crouch: s.o.type === 'move' ? !s.o.run : crouch });
+      }
+      // Abschnitte, die von einer laufenden Person abhängen: gestrichelte Linie dorthin, wo sie jetzt steht
+      if (preview) {
+        const tn = taintOf(segs.map(s => s.o));
+        g.strokeStyle = rgba(col, .8); g.lineWidth = 2.5 * P; g.setLineDash([.22, .14]); g.lineDashOffset = -now / 300;
+        segs.forEach((s, k) => { if (tn[k] && (s.from[0] !== s.to[0] || s.from[1] !== s.to[1])) { g.beginPath(); g.moveTo(s.from[0], s.from[1]); g.lineTo(s.to[0], s.to[1]); g.stroke(); } });
       }
       g.setLineDash([]);
       for (const s of segs) { g.fillStyle = rgba(col, .3); circle(g, s.to[0], s.to[1], .3); g.fill(); g.strokeStyle = col; g.lineWidth = 2 * P; circle(g, s.to[0], s.to[1], .3); g.stroke(); }
