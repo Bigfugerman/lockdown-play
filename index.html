@@ -553,7 +553,9 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   const SEARCH_TIME = 150, SHOUT = 6;
   const STIR = 300, DAZE = 45, WAKE_SEE = 4, DOOR_TIME = 18, DRESS_TIME = 70, FUSE_TIME = 30;
   // Radio: so weit hört man die Musik, so weit übertönt sie Schritte. Teppich halbiert Laufgeräusche und dämpft Münzen.
-  const TAKE_TIME = 90;   // Gemälde von der Wand nehmen
+  const TAKE_TIME = 90;
+  // Wer bei einer Tätigkeit ist, sieht weniger weit: im Gespräch, beim Rauchen, beim Putzen
+  const ACT_SIGHT = { talk: 0.65, smoke: 0.8, clean: 0.7 };   // Gemälde von der Wand nehmen
   const RADIO_NOISE = 8, RADIO_MASK = 3, RADIO_TIME = 20, CARPET = 0.5, CARPET_COIN = 0.6;   // Warnung vor dem Aufwachen, Benommenheit danach, Blickweite beim Aufwachen
   const CATCH = 0.75, BUMP = 0.6, REACH = 1.2, HANDS = 1.5;   // HANDS: Tragen und Fesseln geht auch schräg daneben
 
@@ -816,8 +818,11 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       return Object.assign(base, { segs: [seg], D: dur, speed, phase: g.phase || 0 });
     }
     const wait = g.wait != null ? g.wait : 45;
-    let seq = pts.slice();
-    if (g.mode === 'pingpong') seq = pts.concat(pts.slice(1, -1).reverse());
+    // Wegpunkte: [x, y] oder { at: [x, y], wait, face: Grad oder [x, y], act: 'talk' | 'smoke' | 'clean' | 'look' | 'check', with: Name, check: 'door' | 'case' }
+    const stops = pts.map(p => Array.isArray(p) ? { at: p } : p);
+    let seqS = stops.slice();
+    if (g.mode === 'pingpong') seqS = stops.concat(stops.slice(1, -1).reverse());
+    const seq = seqS.map(s => s.at);
     const n = seq.length;
     const legs = [];
     for (let i = 0; i < n; i++) {
@@ -833,8 +838,17 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       const leg = legs[i], prevLeg = legs[(i - 1 + n) % n];
       const inAng = angOf(prevLeg[prevLeg.length - 2], prevLeg[prevLeg.length - 1]);
       const outAng = angOf(leg[0], leg[1]);
-      const w = wait;
-      if (w > 0) { segs.push({ t0: t, dur: w, pause: true, at: leg[0], a0: inAng, a1: outAng, scan: deg(g.scan || 0) * (i % 2 ? -1 : 1) }); t += w; }
+      const st = seqS[i], w = st.wait != null ? st.wait : wait;
+      if (w > 0) {
+        const sg = { t0: t, dur: w, pause: true, at: leg[0], a0: inAng, a1: outAng, scan: deg(g.scan || 0) * (i % 2 ? -1 : 1) };
+        if (st.face != null || st.act) {
+          // Halt mit Tätigkeit: hindrehen, dabei bleiben, am Ende weiter
+          sg.face = st.face == null ? inAng : Array.isArray(st.face) ? angOf(leg[0], st.face) : deg(st.face);
+          sg.act = st.act || 'look'; sg.with = st.with || null; sg.check = st.check || null; sg.target = Array.isArray(st.face) ? st.face.slice() : null;
+          sg.scan = deg(st.scan != null ? st.scan : 6);
+        }
+        segs.push(sg); t += w;
+      }
       for (let j = 0; j + 1 < leg.length; j++) {
         segs.push({ t0: t, dur: speed, pause: false, from: leg[j], to: leg[j + 1], a0: angOf(leg[j], leg[j + 1]) });
         t += speed;
@@ -849,6 +863,13 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
     let lo = 0, hi = segs.length - 1;
     while (lo < hi) { const m = (lo + hi + 1) >> 1; if (segs[m].t0 <= s) lo = m; else hi = m - 1; }
     const sg = segs[lo], p = (s - sg.t0) / sg.dur;
+    if (sg.pause && sg.act) {
+      // erst zum Ziel drehen (15 %), dann dort bleiben, am Ende zur Weiterlaufrichtung (15 %)
+      const turnIn = smooth(Math.min(1, p / 0.15)), turnOut = smooth(Math.max(0, (p - 0.85) / 0.15));
+      const a = sg.a0 + wrap(sg.face - sg.a0) * turnIn, b = a + wrap(sg.a1 - a) * turnOut;
+      return { x: sg.at[0] + 0.5, y: sg.at[1] + 0.5, ang: b + sg.scan * Math.sin(2 * Math.PI * p) * (1 - turnOut), moving: false,
+        act: p > 0.12 && p < 0.88 ? sg.act : null, with: sg.with, check: sg.check, target: sg.target, stop: lo, round: Math.floor((clock + g.phase) / g.D) };
+    }
     if (sg.pause) {
       if (sg.sweep) return { x: sg.at[0] + 0.5, y: sg.at[1] + 0.5, ang: sg.a0 + sg.scan * Math.sin(2 * Math.PI * p), moving: false };
       const d = wrap(sg.a1 - sg.a0);
@@ -935,7 +956,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
         path: [], step: null, goal: null, purpose: null, search: 0, searchAng: 0,
         sus: 0, wasSeeing: false, stare: false, lastSeen: null, radioOn: false, radio: 0, spotCd: 0,
         down: false, tied: false, wakeAt: 0, downAt: -1, tiedAt: -1, upAt: -1, hidden: false, carriedBy: -1, found: false, bodyIdx: -1, seeing: -1, stirred: false, dazedUntil: 0,
-        outfit: g.kind === 'civil' ? 'kittel' : null, checks: [], check: null, poke: 0, report: null, reportTo: -1, hurry: false, cowerT: 0, coins: 0, happyUntil: 0, radioFix: null
+        outfit: g.kind === 'civil' ? 'kittel' : null, checks: [], check: null, poke: 0, report: null, reportTo: -1, hurry: false, cowerT: 0, coins: 0, happyUntil: 0, radioFix: null, act: null, actWith: -1, talkTo: -1, talkUntil: -1, checkKey: -1
       };
     });
   }
@@ -957,7 +978,8 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
     const G = this.gs[i], g = this.lv.allGuards[i];
     // Wer sich gerade über eine Münze freut, schaut auf seine Hand und sieht kaum etwas
     const happy = this.t < G.happyUntil, blindDark = this.dark && g.kind === 'civil' && this.inDark(G.x, G.y);
-    return { x: G.x, y: G.y, ang: G.ang, range: (g.range + (this.alarm() ? 1 : 0)) * (happy ? 0.4 : 1) * (blindDark ? 0.45 : 1), fov: deg(g.fov) };
+    const busy = G.mode === 'route' ? (ACT_SIGHT[G.act] || 1) : 1;   // abgelenkt: Gespräch, Zigarette, Putzen
+    return { x: G.x, y: G.y, ang: G.ang, range: (g.range + (this.alarm() ? 1 : 0)) * (happy ? 0.4 : 1) * (blindDark ? 0.45 : 1) * busy, fov: deg(g.fov) };
   };
 
   // Sieht Wache i das Crew-Mitglied c?
@@ -1035,6 +1057,19 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   };
   Run.prototype.lootAt = function (x, y) { return this.lv.loot.findIndex((l, i) => l.wall[0] === x && l.wall[1] === y && !this.loot.includes(i)); };
   Run.prototype.onCarpet = function (x, y) { return (this.lv.def.carpets || []).some(r => x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]); };
+  // Kontrollgang: Wache prüft ein Ding auf ihrer Runde
+  Run.prototype.routineCheck = function (i, st) {
+    const lv = this.lv, [x, y] = st.target, k = idx(lv, x, y);
+    if (st.check === 'door') {
+      // rüttelt an der verschlossenen Tür: ist sie offen, sieht sie sich um
+      if (this.opened.has(k)) { this.events.push({ type: 'routineFind', g: i, what: 'door', x, y }); this.investigate(i, [x, y], false); }
+      else this.events.push({ type: 'routine', g: i, what: 'door' });
+    } else if (st.check === 'case') {
+      // schaut in die Vitrine: Ist das Ei weg, gibt es Alarm
+      if (this.opened.has(k) || this.item.taken) { this.events.push({ type: 'routineFind', g: i, what: 'case', x, y }); this.lastKnown = [x + 0.5, y + 0.5]; this.raiseAlarm('case'); }
+      else this.events.push({ type: 'routine', g: i, what: 'case' });
+    }
+  };
   Run.prototype.besidesTile = function (t) { return DIRS.map(([dx, dy]) => [t[0] + dx, t[1] + dy]).filter(([x, y]) => guardWalkable(this.lv, x, y, this)); };
   Run.prototype.inDark = function (x, y) { const z = this.lv.def.darkZone; return !!z && x >= z[0] && x < z[2] + 1 && y >= z[1] && y < z[3] + 1; };
   Run.prototype.outfitAt = function (x, y) { return this.outfits.findIndex(o => o.at[0] === x && o.at[1] === y); };
@@ -1315,8 +1350,27 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       const st = guardState(g, G.clock);
       G.x = st.x; G.y = st.y; G.ang = st.ang; G.moving = st.moving;
       if (st.moving) G.walk += Math.PI * 1.4 / g.speed;
+      // Tagesablauf: Tätigkeit am Halt (bei Alarm keine Pausen mehr)
+      G.act = this.alarm() ? null : st.act || null; G.actWith = -1;
+      if (G.act === 'talk') {
+        const pi = this.lv.allGuards.findIndex(o => o.name === st.with), P = pi >= 0 ? this.gs[pi] : null;
+        if (P && P.active && !P.down && P.mode === 'route' && Math.hypot(P.x - G.x, P.y - G.y) < 2.6) {
+          G.actWith = pi; G.ang = Math.atan2(P.y - G.y, P.x - G.x);
+          P.talkTo = i; P.talkUntil = this.t + 2;     // der andere dreht sich zu ihm
+        } else G.act = 'look';                         // keiner da: wartet und schaut
+      }
+      // Angesprochen: schaut zum, der mit ihm redet
+      if (G.talkUntil >= this.t && G.act !== 'check' && G.act !== 'talk') {
+        const T = this.gs[G.talkTo];
+        if (T && T.act === 'talk' && T.actWith === i) { G.ang = Math.atan2(T.y - G.y, T.x - G.x); G.act = 'talk'; G.actWith = G.talkTo; }
+      }
+      if (st.check && st.act === 'check' && G.act === 'check') {
+        const key = st.round * 1000 + st.stop;
+        if (G.checkKey !== key) { G.checkKey = key; if (!this.blind) this.routineCheck(i, st); }
+      }
       return;
     }
+    G.act = null;
     if (G.step) {
       const s = G.step; s.k++;
       const p = Math.min(1, s.k / s.dur);
@@ -2012,7 +2066,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   };
 
   const api = {
-    TPS, SPEED, NEAR, RADIO, TAKE_TIME, KO_TIME, PICK_TIME, DROP_TIME, TIE_TIME, RADIO_NOISE, RADIO_MASK, CARPET, CARPET_COIN, CHECK_TIME, ALARM_TIME, EXPLICIT, routeOk, isDoor, TOOLS, BOLT, throwClear, LAND_OK, soundField, WHISTLE_R: WHISTLE_PATH, WAKE, STIR, COIN_RANGE, COIN_HEAR, REACH, DIRS, ACTIONS, TILE_NEEDS, TRAIT_NAME, has,
+    TPS, SPEED, NEAR, RADIO, ACT_SIGHT, TAKE_TIME, KO_TIME, PICK_TIME, DROP_TIME, TIE_TIME, RADIO_NOISE, RADIO_MASK, CARPET, CARPET_COIN, CHECK_TIME, ALARM_TIME, EXPLICIT, routeOk, isDoor, TOOLS, BOLT, throwClear, LAND_OK, soundField, WHISTLE_R: WHISTLE_PATH, WAKE, STIR, COIN_RANGE, COIN_HEAR, REACH, DIRS, ACTIONS, TILE_NEEDS, TRAIT_NAME, has,
     parseLevel, kindAt, opaque, guardWalkable, crewWalkable, bfs, path8, tileCost, guardState, lineOfSight, conePoly, tileOf, Run, HIDE
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -2086,12 +2140,16 @@ const LEVEL = {
   ],
   guards: [
     { name: 'Brandt', route: [[8, 14]], face: 90, scan: 55, period: 320, range: 4.5 },
-    { name: 'Kowalski', route: [[2, 15], [14, 15], [14, 20], [2, 20]], mode: 'loop', wait: 50, scan: 30, phase: 300 },
-    { name: 'Yilmaz', route: [[2, 8], [14, 8], [14, 11], [2, 11]], mode: 'loop', wait: 40, scan: 30 },
+    // Tagesablauf: Kowalski plaudert mit Brandt (beide schauen dann zueinander), raucht in der Ecke, schaut aufs Tor
+    { name: 'Kowalski', route: [[2, 15], { at: [9, 14], wait: 200, act: 'talk', with: 'Brandt', face: [8, 14] }, [14, 15], { at: [14, 19], wait: 170, act: 'smoke', face: 0 }, [14, 20], { at: [8, 20], wait: 110, act: 'look', face: 90 }, [2, 20]], mode: 'loop', wait: 40, scan: 30, phase: 300 },
+    // Yilmaz hält ein Schwätzchen mit Frau Petrov und rüttelt an der Seitentür: Ist sie offen, sieht er sich um
+    { name: 'Yilmaz', route: [[2, 8], { at: [14, 8], wait: 150, act: 'talk', with: 'Frau Petrov', face: [14, 7] }, { at: [14, 12], wait: 90, act: 'check', check: 'door', face: [14, 13] }, [2, 11]], mode: 'loop', wait: 40, scan: 30 },
     // Schichtleiterin: zäh (2 Leute oder Bruno), lässt sich nicht weglocken, ruft weiter
-    { name: 'Schichtleiterin Kessler', kind: 'chief', tough: 2, route: [[7, 4], [14, 4]], mode: 'pingpong', wait: 90, scan: 50, phase: 120 },
+    // Sie schaut auf jedem Gang in die Vitrine: Ist das Ei weg, gibt es Alarm
+    { name: 'Schichtleiterin Kessler', kind: 'chief', tough: 2, route: [[7, 4], { at: [11, 3], wait: 100, act: 'check', check: 'case', face: [11, 2] }, [14, 4]], mode: 'pingpong', wait: 90, scan: 50, phase: 120 },
     // Zivilistin: fängt niemanden, rennt aber zur nächsten Wache, wenn sie etwas sieht
-    { name: 'Frau Petrov', kind: 'civil', route: [[3, 7], [13, 7]], mode: 'pingpong', wait: 110, scan: 25, speed: 46, range: 3.5, fov: 40, phase: 200 }
+    // Putzt die Halle und gießt die Pflanze
+    { name: 'Frau Petrov', kind: 'civil', route: [[3, 7], { at: [8, 7], wait: 120, act: 'clean', face: 90 }, { at: [14, 7], wait: 80, act: 'clean', face: 0 }], mode: 'pingpong', wait: 80, scan: 25, speed: 40, range: 3.5, fov: 40, phase: 130 }
   ],
   // Verstärkung bei Alarm
   reinforce: [
@@ -2493,6 +2551,31 @@ else window.LEVEL = LEVEL;
     g.fillStyle = '#7a5230';
     if (h) g.fillRect(x + .04, y + .5, .12, .46); else g.fillRect(x + .5, y + .04, .46, .12);
   }
+  // Tätigkeiten der Wachen: Sprechblase im Gespräch (abwechselnd), Zigarettenglut und Rauch, Wischen
+  function drawActivity(g, G, i, t, now) {
+    const hx = G.x + Math.cos(G.ang) * .18, hy = G.y + Math.sin(G.ang) * .18;
+    if (G.act === 'talk') {
+      const mine = Math.floor(t / 90 + (G.actWith >= 0 && G.actWith < i ? 1 : 0)) % 2 === 0;   // reden abwechselnd
+      const bx = G.x + .32, by = G.y - .62, a = mine ? 1 : .45;
+      g.fillStyle = `rgba(238,243,250,${.92 * a})`; rrect(g, bx - .28, by - .16, .56, .3, .12); g.fill();
+      g.beginPath(); g.moveTo(bx - .14, by + .13); g.lineTo(bx - .22, by + .26); g.lineTo(bx - .02, by + .13); g.fill();
+      g.fillStyle = `rgba(11,15,24,${a})`;
+      for (let k = 0; k < 3; k++) { const on = mine ? (Math.floor(t / 14) % 3 >= k ? 1 : .35) : .5; g.globalAlpha = on; circle(g, bx - .12 + k * .12, by - .01, .035); g.fill(); }
+      g.globalAlpha = 1;
+    } else if (G.act === 'smoke') {
+      const cx = hx + Math.cos(G.ang + .7) * .16, cy = hy + Math.sin(G.ang + .7) * .16, glow = .6 + .4 * Math.sin(t * .09);
+      g.fillStyle = `rgba(255,140,60,${glow})`; circle(g, cx, cy, .035 + .015 * glow); g.fill();
+      for (let k = 0; k < 4; k++) {
+        const ph = ((t / 120) + k / 4) % 1;
+        g.fillStyle = `rgba(200,205,212,${.35 * (1 - ph)})`; circle(g, cx + Math.sin(ph * 6 + k) * .12, cy - ph * .9, .05 + ph * .12); g.fill();
+      }
+    } else if (G.act === 'clean') {
+      const sw = Math.sin(t * .25) * .25, mx = G.x + Math.cos(G.ang) * .45 + Math.cos(G.ang + Math.PI / 2) * sw, my = G.y + Math.sin(G.ang) * .45 + Math.sin(G.ang + Math.PI / 2) * sw;
+      g.strokeStyle = '#a07a4e'; g.lineWidth = .035; g.beginPath(); g.moveTo(G.x, G.y); g.lineTo(mx, my); g.stroke();
+      g.fillStyle = 'rgba(190,210,225,.55)'; g.beginPath(); g.ellipse(mx, my, .12, .06, G.ang + Math.PI / 2, 0, Math.PI * 2); g.fill();
+      g.fillStyle = 'rgba(150,190,220,.16)'; circle(g, G.x + Math.cos(G.ang) * .45, G.y + Math.sin(G.ang) * .45, .32); g.fill();
+    }
+  }
   // Aufgebrochene Tür: Türblatt hängt schief nach innen, Rahmen gesplittert, das Schloss liegt am Boden
   function brokenDoor(g, lv, x, y) {
     const h = doorSide(lv, x, y) === 'h';
@@ -2799,7 +2882,7 @@ else window.LEVEL = LEVEL;
     g.fillStyle = '#fff'; circle(g, x - .05, y - .09, .025); g.fill();
   }
 
-  root.Render = { rgba, shade, rrect, ell, circle, polyPath, buildStatic, openDoor, closedDoor, drawPerson, drawLying, drawEgg, drawCase, brokenDoor, drawPainting, LOOK, guardLook,
+  root.Render = { rgba, shade, rrect, ell, circle, polyPath, buildStatic, openDoor, closedDoor, drawPerson, drawLying, drawEgg, drawCase, brokenDoor, drawActivity, drawPainting, LOOK, guardLook,
     busyP, busyPose, fallP, snapP, riseP, drawImpact, drawDress, lightPoly, lightBlocks, drawFixture, ease, FALL, SNAP, RISE, IMPACT, get softMode() { return canFilter == null ? 'unbekannt' : canFilter ? 'filter' : 'kopien'; } };
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -3287,7 +3370,9 @@ else window.LEVEL = LEVEL;
     });
     run.gs.forEach((G, i) => {
       if (!G.active || G.down) return;
-      R.drawPerson(g, G.x, G.y, G.ang, G.moving ? G.walk : 0, R.guardLook(lv, i), { run: G.purpose === 'chase', scale: .82 + .18 * R.riseP(G, run.t) });
+      const pose = G.act === 'check' ? { reach: .55 } : G.act === 'clean' ? { reach: .35, work: Math.sin(run.t * .25) * .07 } : null;
+      R.drawPerson(g, G.x, G.y, G.ang, G.moving ? G.walk : 0, R.guardLook(lv, i), { run: G.purpose === 'chase', scale: .82 + .18 * R.riseP(G, run.t), pose });
+      if (G.act) R.drawActivity(g, G, i, run.t, now);
     });
     run.crew.forEach((c, i) => {
       const lk = c.disguise ? Object.assign({}, R.LOOK[c.id], KITTEL) : R.LOOK[c.id];
@@ -3898,6 +3983,7 @@ else window.LEVEL = LEVEL;
     issueAs(a.actor, a.order);
   });
   let routeShow = null;
+  const ACT_NAME = { talk: 'plaudert', smoke: 'raucht', clean: 'putzt', look: 'schaut', check: 'prüft' };
   function drawRoute(g, P, now) {
     if (!routeShow || now > routeShow.until) { routeShow = null; return; }
     const def = run.lv.allGuards[routeShow.g], G = run.gs[routeShow.g];
@@ -3911,7 +3997,19 @@ else window.LEVEL = LEVEL;
       g.lineTo(sg.to[0] + .5, sg.to[1] + .5);
     }
     g.stroke(); g.setLineDash([]);
-    for (const sg of def.segs) if (sg.pause && !sg.sweep) { g.fillStyle = rgba('#ffe9a8', .9 * fade); circle(g, sg.at[0] + .5, sg.at[1] + .5, .12); g.fill(); }
+    for (const sg of def.segs) if (sg.pause && !sg.sweep) {
+      g.fillStyle = rgba('#ffe9a8', .9 * fade); circle(g, sg.at[0] + .5, sg.at[1] + .5, sg.act ? .2 : .12); g.fill();
+      // Halt mit Tätigkeit: Symbol und Blickrichtung, damit man seinen Ablauf planen kann
+      if (sg.act) {
+        g.strokeStyle = rgba('#ffe9a8', .9 * fade); g.lineWidth = 2 * P;
+        g.beginPath(); g.moveTo(sg.at[0] + .5, sg.at[1] + .5); g.lineTo(sg.at[0] + .5 + Math.cos(sg.face) * .8, sg.at[1] + .5 + Math.sin(sg.face) * .8); g.stroke();
+        const txt = ACT_NAME[sg.act] + ' ' + Math.round(sg.dur / rate()) + ' s', lx = sg.at[0] + .5, ly = sg.at[1] - .25;
+        g.font = '600 0.3px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        const tw = g.measureText(txt).width;
+        g.fillStyle = rgba("#05090f", .85 * fade); rrectS(g, lx - tw / 2 - .1, ly - .2, tw + .2, .4, .12); g.fill();
+        g.fillStyle = rgba('#ffe9a8', fade); g.fillText(txt, lx, ly + .01);
+      }
+    }
     g.strokeStyle = rgba('#ffe9a8', .9 * fade); g.lineWidth = 2 * P; circle(g, G.x, G.y, .55); g.stroke();
   }
 
@@ -4523,6 +4621,10 @@ else window.LEVEL = LEVEL;
           tip('radio', 'Musik lockt die nächste Wache, die sie hört: Sie kommt und macht das Radio aus. Solange es läuft, übertönt es Laufen und Knacken in der Nähe (lila Fläche). Die Schichtleiterin lässt sich davon nicht weglocken.');
           break;
         case 'loot': Sfx.grab(); toast(c.name + ' nimmt „' + ev.name + '“ mit (' + ev.n + '/' + ev.of + ').', false, 2400); break;
+        case 'routineFind':
+          if (ev.what === 'case') { toast(gname(ev.g) + ' schaut in die Vitrine: leer! Alarm!', true, 3000); if (prefs.reflex) slowUntil = performance.now() + 1600; }
+          else toast(gname(ev.g) + ' rüttelt an der Tür: Sie ist offen! ' + gname(ev.g) + ' sieht sich um.', true, 2800);
+          break;
         case 'radioFixer': toast(gname(ev.g) + ' hört die Musik und kommt sie ausmachen.', true, 2400); break;
         case 'radioOff': if (ev.g != null) toast(gname(ev.g) + ' macht das Radio aus.', false, 2200); else toast('Radio aus.', false, 1400); break;
         case 'dress':
@@ -4673,11 +4775,11 @@ else window.LEVEL = LEVEL;
   /* ---------- Briefing: Kamerafahrt über die Schlüsselstellen, die Crew erklärt ---------- */
   const BRIEF = [
     { who: 'leo', at: [8.5, 14], text: 'Palais Halberg. Die Familie nennt das Smaragd-Ei ein Erbstück. In Wahrheit verschwand es 1944 aus dem Stadtmuseum von Valmora. Heute Nacht bringen wir es zurück.' },
-    { who: 'mara', at: [8.5, 16.5], text: 'Vorne am Haupteingang steht Brandt. Der rührt sich nicht vom Fleck. Kowalski dreht seine Runden durch den Hof. Büsche und Kisten geben Deckung.' },
+    { who: 'mara', at: [8.5, 16.5], text: 'Vorne am Haupteingang steht Brandt. Der rührt sich nicht vom Fleck. Kowalski dreht seine Runden durch den Hof, raucht in der Ecke und hält gern ein Schwätzchen mit Brandt. Dann schauen beide nur noch zueinander. Tipp auf eine Wache und „Runde zeigen“: Da steht, wo sie wie lange stehen bleibt.' },
     { who: 'mara', at: [2, 10], text: 'Westseite: Der Lüftungsschacht führt vom Hof direkt ins Lager. Für mich kein Problem. Und das Fenster zur Halle passt für Leo und mich.' },
     { who: 'bruno', at: [13.5, 13], text: 'Die Seitentür ist zu. Von innen hat sie einen Riegel, von außen hab ich das Brecheisen. Leise ist das allerdings nicht.' },
     { who: 'leo', at: [3, 3], text: 'Im Lager: der Sicherungskasten für die Halle, ein Radio und ein Spind mit Putzkittel. Licht aus oder Musik an lockt Leute weg. Nur weiß dann jemand, dass hier was los ist.' },
-    { who: 'leo', at: [11.5, 2.5], text: 'Oben in der Galerie steht das Ei, in einer Vitrine. Die öffnen nur mein Dietrich oder Brunos Brecheisen. Kessler, die Schichtleiterin, lässt sich durch nichts weglocken. Höchstens das Licht holt sie da raus.' },
+    { who: 'leo', at: [11.5, 2.5], text: 'Oben in der Galerie steht das Ei, in einer Vitrine. Die öffnen nur mein Dietrich oder Brunos Brecheisen. Kessler, die Schichtleiterin, lässt sich durch nichts weglocken. Höchstens das Licht holt sie da raus. Und sie schaut bei jedem Gang in die Vitrine: Ist das Ei weg, gibt es Alarm. Ab da läuft die Uhr.' },
     { who: 'mara', at: [9, 24], text: 'Rein, Ei holen, zurück zum Wagen. Die zwei kleinen Bilder an der Wand nehmen wir mit, wenn es sich ergibt. Und keiner merkt was.' }
   ];
   let briefI = -1, camTarget = null;
