@@ -502,6 +502,8 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       <button class="btn" id="btn-left">Steuerung: rechts</button>
       <button class="btn" id="btn-hold">Zeit steht beim Zielen: an</button>
       <button class="btn" id="btn-reflex">Reflex-Zeitlupe: an</button>
+      <button class="btn" id="btn-allsee">Alle Wachen zeigen: aus</button>
+      <p class="note">Im Anwesen siehst du Wachen nur, wenn deine Leute sie sehen. Wer das zu schwer findet, schaltet hier alle sichtbar.</p>
       <button class="btn" id="btn-strict">Entdeckt = Ende: aus</button>
       <p class="note">Aus: Wer entdeckt wird, kann noch fliehen, sich verstecken oder den Verfolger von hinten ausschalten. Vorbei ist es erst, wenn eine Wache dich packt. An: Jeder Blickkontakt beendet den Coup.</p>
       <button class="btn" id="btn-sound">Ton: an</button>
@@ -560,7 +562,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   const PICK_PULSE = 30;   // so oft macht Knacken ein Geräusch
   const WHISTLE_PATH = 8, WHISTLE_CD = 240, RUN_NOISE = 3, HAPPY_TIME = 100;   // HAPPY: so lange freut sich, wer eine Münze findet
   const SEARCH_TIME = 150, SHOUT = 6;
-  const STIR = 300, DAZE = 45, WAKE_SEE = 4, DOOR_TIME = 18, DRESS_TIME = 70, FUSE_TIME = 30;
+  const STIR = 300, DAZE = 45, WAKE_SEE = 4, DOOR_TIME = 18, DRESS_TIME = 70, FUSE_TIME = 30, PEEK_TIME = 60;   // durchs Schlüsselloch: 1 s
   // Radio: so weit hört man die Musik, so weit übertönt sie Schritte. Teppich halbiert Laufgeräusche und dämpft Münzen.
   const TAKE_TIME = 90;
   // Wer bei einer Tätigkeit ist, sieht weniger weit: im Gespräch, beim Rauchen, beim Putzen
@@ -585,13 +587,13 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       { id: 'go', label: 'Hingehen', needs: [], onlyHidden: true },
       { id: 'dressBody', label: 'Kittel nehmen', needs: [], onlyOutfit: true }
     ],
-    locked: [{ id: 'bolt', label: 'Riegel auf', needs: [], def: true, inside: true }, { id: 'lock', label: 'Knacken', needs: ['dietrich'], def: true }, { id: 'break', label: 'Aufbrechen', needs: ['brecheisen'], def: true }],
+    locked: [{ id: 'bolt', label: 'Riegel auf', needs: [], def: true, inside: true }, { id: 'lock', label: 'Knacken', needs: ['dietrich'], def: true }, { id: 'break', label: 'Aufbrechen', needs: ['brecheisen'], def: true }, { id: 'peek', label: 'Durchs Schlüsselloch', needs: [] }],
     case: [{ id: 'lock', label: 'Vitrine öffnen', needs: ['dietrich'], def: true }, { id: 'break', label: 'Glas einschlagen', needs: ['brecheisen'], def: true }],
     outfit: [{ id: 'dress', label: 'Kittel anziehen', needs: [], def: true }, { id: 'goto', label: 'Verstecken', needs: [] }],
     fuse: [{ id: 'fuse', label: 'Licht', needs: [], def: true }],
     radio: [{ id: 'radio', label: 'Radio', needs: [], def: true }],
     loot: [{ id: 'take', label: 'Abnehmen', needs: [], def: true }],
-    door: [{ id: 'door', label: 'Tür', needs: [], def: true }, { id: 'goto', label: 'Hingehen', needs: [] }],
+    door: [{ id: 'door', label: 'Tür', needs: [], def: true }, { id: 'goto', label: 'Hingehen', needs: [] }, { id: 'peek', label: 'Durchs Schlüsselloch', needs: [] }],
     window: [{ id: 'climb', label: 'Durchklettern', needs: TILE_NEEDS.window, def: true }],
     vent: [{ id: 'crawl', label: 'Reinkriechen', needs: TILE_NEEDS.vent, def: true }],
     gap: [{ id: 'climb', label: 'Durchzwängen', needs: TILE_NEEDS.gap, def: true }],
@@ -971,7 +973,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
         id: c.id, name: c.name, traits: (c.traits || []).slice(), coins: c.coins || 0,
         vent: (c.traits || []).includes('geschickt'), whistle: (c.traits || []).includes('pfiff'), lockpick: (c.traits || []).includes('dietrich'),
         x: s[0] + 0.5, y: s[1] + 0.5, tile: s.slice(), ang: -Math.PI / 2, path: [], move: null, order: null, run: false,
-        carrying: -1, busy: null, hidden: false, crouch: true, caught: false, atExit: false, whistleAt: 0, dist: 0, noiseAt: 0, gait: 'sneak', queue: [],
+        carrying: -1, busy: null, hidden: false, crouch: true, caught: false, atExit: false, whistleAt: 0, peekAt: null, dist: 0, noiseAt: 0, gait: 'sneak', queue: [],
         ties: c.ties != null ? c.ties : 2, flushed: null, disguise: null, planned: false, keepOnSpot: false,
         // Bewegungsprofil: Ticks pro Feld je Gangart, Lautstärke beim Rennen
         speed: Object.assign({}, SPEED, c.move || {}), noise: c.noise != null ? c.noise : RUN_NOISE,
@@ -1647,6 +1649,16 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       c.order = { type: 'lock', x: o.x, y: o.y, bolt: o.type === 'bolt' }; c.path = p; c.run = c.gait === 'run' && c.carrying < 0;
       return { ok: true };
     }
+    if (o.type === 'peek') {
+      const k = kindAt(lv, o.x, o.y);
+      if (k !== 'door' && k !== 'locked') return { ok: false, why: 'Da ist keine Tür.' };
+      const goals = this.besides(ci, [o.x, o.y], false).filter(([bx, by]) => bx === o.x || by === o.y);
+      const here = c.move ? c.move.to : c.tile;
+      const p = goals.some(g => g[0] === here[0] && g[1] === here[1]) ? [] : this.crewPath(ci, goals);
+      if (!p) return { ok: false, why: 'Kein Weg zur Tür.' };
+      c.order = { type: 'peek', x: o.x, y: o.y }; c.path = p; c.run = !!o.run && c.carrying < 0;
+      return { ok: true };
+    }
     if (o.type === 'fuse') {
       if (kindAt(lv, o.x, o.y) !== 'fuse') return { ok: false, why: 'Das ist kein Sicherungskasten.' };
       const goals = this.besides(ci, [o.x, o.y], false);
@@ -1804,6 +1816,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       if (this.t >= c.busy.until) {
         const b = c.busy; c.busy = null;
         if (b.type === 'drop') { if (c.carrying >= 0) this.dropBody(ci); }
+        else if (b.type === 'peek') { c.peekAt = { x: b.x, y: b.y, t: this.t }; this.events.push({ type: 'peek', c: ci, x: b.x, y: b.y }); }
         else if (b.type === 'pick') { c.carrying = b.g; this.gs[b.g].carriedBy = ci; this.gs[b.g].hidden = false; this.events.push({ type: 'pick', c: ci }); }
         else if (b.type === 'tie') { this.gs[b.g].tied = true; this.gs[b.g].tiedAt = this.t; c.ties--; this.stats.tie++; this.events.push({ type: 'tie', c: ci, left: c.ties }); }
         else if (b.type === 'fuse') {
@@ -1897,6 +1910,10 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
         c.path = p || []; o.repath = 10;
         if (!p) { c.order = null; this.events.push({ type: 'skip', c: ci, why: 'Kein Weg zu ' + gname(this, o.g) + '.' }); }
       }
+    }
+    if (o && o.type === 'peek' && !c.move && !c.path.length) {
+      c.order = null;
+      if (Math.abs(o.x - c.tile[0]) + Math.abs(o.y - c.tile[1]) === 1) { c.busy = { t0: this.t, type: 'peek', x: o.x, y: o.y, until: this.t + PEEK_TIME }; c.ang = Math.atan2(o.y - c.tile[1], o.x - c.tile[0]); }
     }
     if (o && o.type === 'fuse' && !c.move && !c.path.length) {
       c.order = null;
@@ -2106,7 +2123,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   };
 
   const api = {
-    TPS, SPEED, NEAR, RADIO, ACT_SIGHT, TUNNEL, CLIMB, TAKE_TIME, KO_TIME, PICK_TIME, DROP_TIME, TIE_TIME, RADIO_NOISE, RADIO_MASK, CARPET, CARPET_COIN, CHECK_TIME, ALARM_TIME, EXPLICIT, routeOk, isDoor, TOOLS, BOLT, throwClear, LAND_OK, soundField, WHISTLE_R: WHISTLE_PATH, WAKE, STIR, COIN_RANGE, COIN_HEAR, REACH, DIRS, ACTIONS, TILE_NEEDS, TRAIT_NAME, has,
+    TPS, SPEED, NEAR, PEEK_TIME, RADIO, ACT_SIGHT, TUNNEL, CLIMB, TAKE_TIME, KO_TIME, PICK_TIME, DROP_TIME, TIE_TIME, RADIO_NOISE, RADIO_MASK, CARPET, CARPET_COIN, CHECK_TIME, ALARM_TIME, EXPLICIT, routeOk, isDoor, TOOLS, BOLT, throwClear, LAND_OK, soundField, WHISTLE_R: WHISTLE_PATH, WAKE, STIR, COIN_RANGE, COIN_HEAR, REACH, DIRS, ACTIONS, TILE_NEEDS, TRAIT_NAME, has,
     parseLevel, kindAt, opaque, guardWalkable, crewWalkable, bfs, path8, tileCost, guardState, lineOfSight, conePoly, tileOf, Run, HIDE
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -2217,6 +2234,7 @@ else window.LEVEL = LEVEL;
     intro: 'Das Bernstein-Diadem liegt in der Galerie des Anwesens, hinter einer verschlossenen Tür in einer Vitrine. Holt es und bringt alle zurück zum Wagen.',
     ways: 'Aufs Gelände kommt ihr durchs bewachte Haupttor, das verschlossene Lieferantentor, über den Efeu an der Westmauer, durch die Lücke in der Nordhecke oder durch den Kanal. Ins Haus durch Türen, Fenster und den Lüftungsschacht über der Terrasse.',
     blurb: 'Großes Anwesen · fünf Wege aufs Gelände',
+    fog: true,   // Wissen statt Nebel: Wachen sieht man nur, wenn die Crew sie sieht
     brief: [
       { who: 'leo', at: [14, 28], text: 'Anwesen Halberg, das Landhaus der Familie. Das Bernstein-Diadem kam 1944 aus Valmora hierher, genau wie das Ei. Diesmal ist alles größer: Mauer, Park, zwei Flügel, neun Leute im Dienst.' },
       { who: 'mara', at: [23, 25], text: 'Vorne das Haupttor. Haas sitzt im Pförtnerhaus und schaut durchs Fenster auf die Auffahrt. Brandt dreht seine Runde durch den Hof, raucht an der Hecke und hält bei Haas ein Schwätzchen. Durchs Tor nur mit gutem Timing.' },
@@ -3103,6 +3121,7 @@ else window.LEVEL = LEVEL;
       case 'ko':   // der Schlag sitzt im ersten Tick: ganz vorn, dann zurückfedern und festhalten
         return { lean: p < .15 ? 1 : 1 - ease((p - .15) / .85), reach: 1, swoosh: Math.max(0, 1 - since / 12) };
       case 'tie': return { kneel: true, reach: .4, work: Math.sin(since * .45) * .06 };
+      case 'peek': return { kneel: true, reach: .15, lean: .35 };
       case 'pick': return { kneel: p < .7, reach: .6 };
       case 'dress': return { up: Math.sin(since * .5), spin: Math.sin(p * Math.PI * 3) * .55 * (1 - p * .5) };
       case 'lock': return { reach: brute ? .8 : .5, work: brute ? (since % 20 < 5 ? .06 : 0) : Math.sin(since * 1.3) * .02, lean: brute && since % 20 < 5 ? .5 : 0 };
@@ -3215,7 +3234,7 @@ else window.LEVEL = LEVEL;
   /* ---------- Einstellungen ---------- */
   const KEY = 'lockdown.p1';
   const TEMPOS = [0.5, 0.7, 0.85, 1];
-  const prefs = { tempo: 0.7, sound: true, music: true, briefed: false, seen: [], tips: [], strict: false, reflex: !(window.matchMedia && matchMedia('(pointer: fine)').matches), hold: true, left: false, crew: ['leo', 'mara'], level: null };
+  const prefs = { tempo: 0.7, sound: true, music: true, briefed: false, seen: [], allSee: false, tips: [], strict: false, reflex: !(window.matchMedia && matchMedia('(pointer: fine)').matches), hold: true, left: false, crew: ['leo', 'mara'], level: null };
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
     if (TEMPOS.includes(s.tempo)) prefs.tempo = s.tempo;
@@ -3228,6 +3247,7 @@ else window.LEVEL = LEVEL;
     if (typeof s.hold === 'boolean') prefs.hold = s.hold;
     if (typeof s.left === 'boolean') prefs.left = s.left;
     if (Array.isArray(s.crew) && s.crew.length === 2 && s.crew.every(id => LEVEL.crew.some(c => c.id === id))) prefs.crew = s.crew;
+    if (typeof s.allSee === 'boolean') prefs.allSee = s.allSee;
     if (Array.isArray(s.seen)) prefs.seen = s.seen.filter(t => typeof t === 'string');
     if (LEVELS.some(l => l.id === s.level)) prefs.level = s.level;
   } catch (e) { /* ohne Speicher */ }
@@ -3470,7 +3490,7 @@ else window.LEVEL = LEVEL;
 
   function newRun() {
     ACTIVE = Object.assign({}, LEVEL, { crew: LEVEL.crew.filter(c => prefs.crew.includes(c.id)) });
-    run = new C.Run(ACTIVE); run.strict = prefs.strict; quick = null; sel = 0; aim = null; sd = null; ring = null; routeShow = null;
+    run = new C.Run(ACTIVE); run.strict = prefs.strict; know = []; quick = null; sel = 0; aim = null; sd = null; ring = null; routeShow = null;
     rewindBuf = []; lastSnapT = -1e9; rewinds = 0; slowUntil = 0; nearTipChecked = false; lastPlan = null;
     fx.ripples.length = 0; fx.fields.length = 0; fx.flash = 0;
     $('#btn-load').disabled = true;
@@ -3592,6 +3612,64 @@ else window.LEVEL = LEVEL;
   const KITTEL = { body: '#4f8f86', sleeve: '#447d75', apron: '#d8e6e2', scarf: null };
   const takenLook = (i) => Object.assign({}, R.guardLook(run.lv, i), { body: '#cfc6b8', sleeve: '#cfc6b8', apron: null });
 
+  /* ---------- Wissen statt Nebel ----------
+     In Levels mit fog (Anwesen) zeigt die Karte eine Wache nur, wenn die Crew sie gerade sieht (rundum SIGHT Felder,
+     Wände und geschlossene Türen halten den Blick auf, Fenster und offene Türen nicht), durchs Schlüsselloch späht oder wenn
+     die Wache selbst jemanden von der Crew sieht. Sonst bleibt ein Umriss an der letzten bekannten Stelle. Zu Beginn kennt die
+     Crew alle aus der Vorbereitung: Umriss an der Startstelle, Runden sind bekannt. Nur Darstellung, die Spiellogik weiß davon nichts. */
+  const SIGHT = 8, PEEK_R = 10, PEEK_FOV = .62, PEEK_HOLD = 60, HEAR_STEPS = 4;
+  let know = [];
+  const fogOn = () => !!(LEVEL.fog && !prefs.allSee);
+  function resetKnow() { know = run.gs.map(G => ({ live: !fogOn(), seen: -1, x: G.x, y: G.y, ang: G.ang, prep: true, stepAt: 0 })); }
+  // Späht die Figur gerade durch eine Tür? Solange sie schaut und eine Sekunde danach
+  function peekView(c) {
+    const b = c.busy && c.busy.type === 'peek' ? c.busy : c.peekAt && run.t - c.peekAt.t <= PEEK_HOLD ? c.peekAt : null;
+    if (!b || Math.abs(b.x - c.tile[0]) + Math.abs(b.y - c.tile[1]) !== 1) return null;
+    return { door: [b.x, b.y], ang: Math.atan2(b.y + .5 - c.y, b.x + .5 - c.x) };
+  }
+  // Sichtlinie, bei der eine bestimmte Tür als offen zählt (Schlüsselloch)
+  function losThrough(ax, ay, bx, by, door) {
+    const dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy), steps = Math.ceil(d / .08), ex = Math.floor(bx), ey = Math.floor(by);
+    for (let i = 1; i < steps; i++) {
+      const sx = Math.floor(ax + dx * i / steps), sy = Math.floor(ay + dy * i / steps);
+      if ((sx === ex && sy === ey) || (sx === door[0] && sy === door[1])) continue;
+      if (C.opaque(run.lv, sx, sy, run)) return false;
+    }
+    return true;
+  }
+  function crewSees(x, y) {
+    for (const c of run.crew) {
+      if (c.caught) continue;
+      const d = Math.hypot(x - c.x, y - c.y);
+      if (d <= SIGHT && C.lineOfSight(run.lv, c.x, c.y, x, y, run)) return true;
+      const pv = peekView(c);
+      if (pv && d <= PEEK_R && Math.abs(wrapA(Math.atan2(y - c.y, x - c.x) - pv.ang)) < PEEK_FOV && losThrough(c.x, c.y, x, y, pv.door)) return true;
+    }
+    return false;
+  }
+  function updateKnow() {
+    if (know.length !== run.gs.length) resetKnow();
+    const fog = fogOn(), now = performance.now();
+    run.gs.forEach((G, i) => {
+      const K = know[i];
+      if (!G.active) { K.live = false; return; }
+      const live = !fog || G.down || G.carriedBy >= 0 || crewSees(G.x, G.y) || run.crew.some(c => run.canSee(i, c));
+      K.live = live;
+      if (live) { K.seen = run.t; K.x = G.x; K.y = G.y; K.ang = G.ang; K.prep = false; return; }
+      // Schritte hinter Wand und Tür: Wer nah genug läuft, macht leise Geräuschkringel
+      if (G.moving && mode === 'play' && !sd && now - K.stepAt > 650) {
+        const field = run.soundAt([Math.floor(G.x), Math.floor(G.y)], HEAR_STEPS);
+        if (run.crew.some(c => !c.caught && field.has(c.tile[1] * run.lv.W + c.tile[0]))) { K.stepAt = now; ripple(G.x, G.y, '#9fb3c8', .15, .8, 700); }
+      }
+    });
+  }
+  const shown = (i) => !fogOn() || !!(know[i] && know[i].live);
+  // Umriss einer nicht sichtbaren Wache: wo sie zuletzt war
+  function drawGhost(g, i, P) {
+    const K = know[i]; if (!K || K.live || !run.gs[i].active) return;
+    R.drawPerson(g, K.x, K.y, K.ang, 0, R.guardLook(run.lv, i), { alpha: .22, noLight: true });
+    g.strokeStyle = 'rgba(200,214,232,.45)'; g.lineWidth = 1.5 * P; g.setLineDash([.12, .1]); circle(g, K.x, K.y, .45); g.stroke(); g.setLineDash([]);
+  }
   function draw(now) {
     const g = ctx, lv = run.lv, P = 1 / cam.z;
     g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#04070d'; g.fillRect(0, 0, cv.width, cv.height);
@@ -3605,7 +3683,7 @@ else window.LEVEL = LEVEL;
     }
     for (const i of run.closed) R.closedDoor(g, lv, i % lv.W, (i / lv.W) | 0);
     const alarm = run.alarm(), pulse = .5 + .5 * Math.sin(now / 220);
-    const views = run.gs.map((G, i) => (G.active && !G.down) ? run.viewer(i) : null);
+    const views = run.gs.map((G, i) => (G.active && !G.down && shown(i)) ? run.viewer(i) : null);
     const cones = views.map(v => v ? C.conePoly(lv, v, 32, run) : null);
 
     // Nacht: alles dunkel außer Lampen und Taschenlampen
@@ -3695,6 +3773,7 @@ else window.LEVEL = LEVEL;
     });
     run.gs.forEach((G, i) => {
       if (!G.active || G.down) return;
+      if (!shown(i)) { drawGhost(g, i, P); return; }
       const pose = G.act === 'check' ? { reach: .55 } : G.act === 'clean' ? { reach: .35, work: Math.sin(run.t * .25) * .07 } : null;
       R.drawPerson(g, G.x, G.y, G.ang, G.moving ? G.walk : 0, R.guardLook(lv, i), { run: G.purpose === 'chase', scale: .82 + .18 * R.riseP(G, run.t), pose });
       if (G.act) R.drawActivity(g, G, i, run.t, now);
@@ -3799,7 +3878,7 @@ else window.LEVEL = LEVEL;
     }
     // Bildschirm-Ebene: Symbole über Köpfen, Nummern der Planschritte
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    run.gs.forEach((G, i) => { if (G.active) drawStatus(g, G, i); });
+    run.gs.forEach((G, i) => { if (G.active && shown(i)) drawStatus(g, G, i); else if (G.active && !G.down) ghostTag(g, i); });
     run.crew.forEach((c, i) => drawCrewTag(g, c, i));
     if (sd) {
       const used = new Map();
@@ -3913,7 +3992,7 @@ else window.LEVEL = LEVEL;
   // Würde die Figur an diesem Punkt gerade gesehen? Nur die Kegel von jetzt, keine Zukunft.
   function seenAt(x, y, crouch, ci) {
     const fake = { x, y, hidden: isHide(Math.floor(x), Math.floor(y)), caught: false, crouch, run: !crouch, carrying: -1, disguise: ci != null ? run.crew[ci].disguise : null };
-    for (let i = 0; i < run.gs.length; i++) if (run.canSee(i, fake)) return true;
+    for (let i = 0; i < run.gs.length; i++) if (shown(i) && run.canSee(i, fake)) return true;
     return false;
   }
   function footprints(g, from, path, opt) {
@@ -3983,7 +4062,7 @@ else window.LEVEL = LEVEL;
     const W = run.lv.W;
     for (const [k, d] of field) { g.fillStyle = rgba(col, .05 + .22 * (1 - d / r)); g.fillRect(k % W, (k / W) | 0, 1, 1); }
     run.gs.forEach((G, i) => {
-      if (!G.active || G.down || !run.hears(field, i)) return;
+      if (!G.active || G.down || !shown(i) || !run.hears(field, i)) return;
       const lured = run.canDistract(i);
       g.strokeStyle = rgba(lured ? col : '#ff4a3d', .7 + .3 * Math.sin(now / 180)); g.lineWidth = 2.5 * P; circle(g, G.x, G.y, .55); g.stroke();
     });
@@ -4024,6 +4103,17 @@ else window.LEVEL = LEVEL;
   function numberBadge(g, x, y, n, col) {
     g.fillStyle = col; circle(g, x, y, 9); g.fill();
     g.fillStyle = '#0b0f18'; g.font = font(12); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(n), x, y + 1);
+  }
+  // Beim Umriss: wie lange her (oder „Plan“, wenn nur aus der Vorbereitung bekannt)
+  function ghostTag(g, i) {
+    const K = know[i]; if (!K) return;
+    const [sx, sy] = toScreen(K.x, K.y - .72);
+    if (sx < -30 || sy < -30 || sx > vw + 30 || sy > vh + 30) return;
+    const txt = K.prep ? '?' : Math.min(99, Math.round((run.t - K.seen) / C.TPS)) + 's';
+    g.font = font(11); g.textAlign = 'center'; g.textBaseline = 'middle';
+    const w = Math.max(20, g.measureText(txt).width + 10);
+    g.fillStyle = 'rgba(5,9,18,.7)'; rrectS(g, sx - w / 2, sy - 9, w, 18, 9); g.fill();
+    g.fillStyle = 'rgba(200,214,232,.85)'; g.fillText(txt, sx, sy + 1);
   }
   function drawStatus(g, G, i) {
     const [sx, sy] = toScreen(G.x, G.y - .72);
@@ -4143,6 +4233,7 @@ else window.LEVEL = LEVEL;
       case 'bolt': return { type: 'bolt', x: t.x, y: t.y };
       case 'crawl': { if (t.kind !== 'grate' && t.kind !== 'sewer') return { type: 'move', x: t.x, y: t.y }; const e = sewerEnd(t, ci); return e ? { type: 'move', x: e[0], y: e[1] } : null; }
       case 'door': return { type: 'door', x: t.x, y: t.y };
+      case 'peek': return { type: 'peek', x: t.x, y: t.y };
       case 'fuse': return { type: 'fuse', x: t.x, y: t.y };
       case 'radio': return { type: 'radio', x: t.x, y: t.y };
       case 'take': return { type: 'take', x: t.x, y: t.y };
@@ -4184,7 +4275,8 @@ else window.LEVEL = LEVEL;
     // Nur die ausgewählte Figur: Was sie gar nicht kann, steht bei Personen nicht im Rad.
     // Bei Fenster, Schacht und Tür steht es grau mit Grund da, damit man weiß, warum nichts geht.
     const ci = sel, c = run.crew[ci];
-    const ICONS = { take: 'frame', radio: 'radio', bolt: 'door', fuse: 'bolt', break: 'lock', ko: 'ko', coin: 'coin', whistle: 'whistle', pick: 'carry', tie: 'tie', go: 'go', lock: 'lock', climb: 'go', crawl: 'vent', door: 'door', goto: 'go' };
+    if (t.kind === 'ghost') return [{ id: 'route', icon: 'eye', actor: -1, label: 'Runde zeigen', note: 'aus der Vorbereitung', special: 'route' }];
+    const ICONS = { peek: 'eye', take: 'frame', radio: 'radio', bolt: 'door', fuse: 'bolt', break: 'lock', ko: 'ko', coin: 'coin', whistle: 'whistle', pick: 'carry', tie: 'tie', go: 'go', lock: 'lock', climb: 'go', crawl: 'vent', door: 'door', goto: 'go' };
     const CANT = { window: 'passt nicht durch', vent: 'passt nicht rein', gap: 'passt nicht durch', ivy: 'kommt da nicht hoch', manhole: 'hat kein Brecheisen', locked: 'hat kein Werkzeug dafür', case: 'hat kein Werkzeug dafür' };
     for (const A of (C.ACTIONS[t.kind] || [])) {
       if (A.onlyHidden && !(t.kind === 'body' && run.gs[t.g].hidden)) continue;
@@ -4197,6 +4289,7 @@ else window.LEVEL = LEVEL;
         out.push(item); continue;
       }
       if (A.needs === null) { out.push({ id: A.id, icon: 'eye', actor: -1, label: A.label, note: '', special: 'route' }); continue; }
+      if (A.id === 'peek' && (!fogOn() || (t.kind === 'door' && !doorClosed(t.x, t.y)) || (t.kind === 'locked' && run.opened.has(t.y * run.lv.W + t.x) && !doorClosed(t.x, t.y)))) continue;
       const item = { id: A.id, icon: ICONS[A.id], label: A.label, note: '', actor: ci };
       const lacks = (A.needs || []).filter(n => n !== 'muenze' && n !== 'kabelbinder' && !c.traits.includes(n));
       if (lacks.length || (A.id === 'coin' && !ACTIVE.crew[ci].coins)) {
@@ -4239,6 +4332,7 @@ else window.LEVEL = LEVEL;
       if (A.id === 'take') item.note = secs(C.TAKE_TIME) + ' · Nebenbeute';
       if (A.id === 'climb') item.note = c.speed.climb < 40 ? 'flink' : 'dauert';
       if (A.id === 'crawl') item.note = 'unsichtbar';
+      if (A.id === 'peek') item.note = '1 s · wer ist dahinter?';
       out.push(item);
     }
     // Gibt es einen Weg, den die Figur kann, fallen die Wege weg, die sie gar nicht kann
@@ -4261,6 +4355,7 @@ else window.LEVEL = LEVEL;
     if (t.kind === 'radio') return `<b>Radio</b> · ${radioIsOn(t.x, t.y) ? 'Musik läuft' : 'aus'}`;
     if (t.kind === 'door') return `<b>Tür</b> · ${doorClosed(t.x, t.y) ? 'zu' : 'offen'}`;
     if (t.kind === 'vent') return '<b>Lüftungsschacht</b>';
+    if (t.kind === 'ghost') { const K = know[t.g]; return `<b>${gname(t.g)}</b> · ${K.prep ? 'nur aus der Vorbereitung bekannt' : 'zuletzt gesehen vor ' + Math.round((run.t - K.seen) / C.TPS) + ' s'}`; }
     if (t.kind === 'gap') return '<b>Lücke in der Hecke</b> · eng';
     if (t.kind === 'ivy') return '<b>Efeu</b> · über die Mauer klettern';
     if (t.kind === 'manhole') return '<b>Kanaldeckel</b> · zu';
@@ -4355,7 +4450,8 @@ else window.LEVEL = LEVEL;
         g.fillStyle = rgba('#ffe9a8', fade); g.fillText(txt, lx, ly + .01);
       }
     }
-    g.strokeStyle = rgba('#ffe9a8', .9 * fade); g.lineWidth = 2 * P; circle(g, G.x, G.y, .55); g.stroke();
+    const at = shown(routeShow.g) ? [G.x, G.y] : [know[routeShow.g].x, know[routeShow.g].y];
+    g.strokeStyle = rgba('#ffe9a8', .9 * fade); g.lineWidth = 2 * P; circle(g, at[0], at[1], .55); g.stroke();
   }
 
   /* ---------- Tipps: einmalig, halten das Spiel kurz an ---------- */
@@ -4447,7 +4543,7 @@ else window.LEVEL = LEVEL;
   function statusOf(c, i) {
     if (c.caught) return 'geschnappt';
     if (sd) return sd[i].length ? sd[i].length + (sd[i].length > 1 ? ' Schritte geplant' : ' Schritt geplant') : 'noch nichts geplant';
-    if (c.busy) return ({ lock: c.busy.bolt ? 'schiebt den Riegel' : c.tool === 'brecheisen' ? 'bricht auf' : 'knackt Schloss', tie: 'fesselt', pick: 'hebt auf', ko: 'schlägt zu', dress: 'zieht sich um', fuse: 'am Sicherungskasten', take: 'nimmt das Bild ab', radio: 'am Radio', door: 'an der Tür' })[c.busy.type] || 'beschäftigt';
+    if (c.busy) return ({ lock: c.busy.bolt ? 'schiebt den Riegel' : c.tool === 'brecheisen' ? 'bricht auf' : 'knackt Schloss', tie: 'fesselt', pick: 'hebt auf', ko: 'schlägt zu', dress: 'zieht sich um', fuse: 'am Sicherungskasten', take: 'nimmt das Bild ab', radio: 'am Radio', door: 'an der Tür', peek: 'schaut durchs Schlüsselloch' })[c.busy.type] || 'beschäftigt';
     const inVent = C.TUNNEL.has(C.kindAt(run.lv, c.tile[0], c.tile[1])), inSewer = C.kindAt(run.lv, c.tile[0], c.tile[1]) === 'sewer';
     const bits = [];
     if (inVent) bits.push(inSewer ? 'im Kanal' : 'im Schacht'); else if (c.hidden) bits.push('versteckt');
@@ -4631,9 +4727,10 @@ else window.LEVEL = LEVEL;
     // Wachen, Bewusstlose, Türen, Schacht: Aktionsrad statt Sofortbefehl
     let gi = -1; bd = .6;
     run.gs.forEach((G, i) => {
-      if (!G.active || (G.down && G.hidden) || G.carriedBy >= 0) return;
+      if (!G.active || (G.down && G.hidden) || G.carriedBy >= 0 || !shown(i)) return;
       const d = Math.hypot(G.x - wx, G.y - wy); if (d < bd) { bd = d; gi = i; }
     });
+    { const gh = ghostAt(wx, wy); if (gi < 0 && gh >= 0) { openRing({ kind: 'ghost', g: gh, x: Math.floor(know[gh].x), y: Math.floor(know[gh].y) }); return; } }
     if (gi >= 0) { const pd = !run.gs[gi].down && plannedDown(gi); openRing({ kind: run.gs[gi].down || pd ? 'body' : 'guard', planned: pd, g: gi, x: Math.floor(run.gs[gi].x), y: Math.floor(run.gs[gi].y) }); return; }
     const hidden = run.gs.findIndex(G => G.active && G.down && G.hidden && G.carriedBy < 0 && Math.floor(G.x) === tx && Math.floor(G.y) === ty);
     if (hidden >= 0) { openRing({ kind: 'body', g: hidden, x: tx, y: ty }); return; }
@@ -4697,11 +4794,18 @@ else window.LEVEL = LEVEL;
     if (C.TUNNEL.has(k) && (any || !(inTun && C.crewWalkable(lv, tx, ty, c, run)))) return { kind: k, x: tx, y: ty };
     return null;
   }
+  // Umriss unter dem Finger (nicht sichtbare Wache an der letzten bekannten Stelle)
+  function ghostAt(wx, wy) {
+    if (!fogOn()) return -1;
+    let gi = -1, bd = .6;
+    run.gs.forEach((G, i) => { if (!G.active || G.down || shown(i) || !know[i]) return; const d = Math.hypot(know[i].x - wx, know[i].y - wy); if (d < bd) { bd = d; gi = i; } });
+    return gi;
+  }
   // Was liegt unter dem Finger? Für Antippen und Loslassen beim Ziehen
   function thingAt(sx, sy) {
     const [wx, wy] = toWorld(sx, sy), tx = Math.floor(wx), ty = Math.floor(wy), lv = run.lv;
     let gi = -1, bd = .6;
-    run.gs.forEach((G, i) => { if (!G.active || (G.down && G.hidden) || G.carriedBy >= 0) return; const d = Math.hypot(G.x - wx, G.y - wy); if (d < bd) { bd = d; gi = i; } });
+    run.gs.forEach((G, i) => { if (!G.active || (G.down && G.hidden) || G.carriedBy >= 0 || !shown(i)) return; const d = Math.hypot(G.x - wx, G.y - wy); if (d < bd) { bd = d; gi = i; } });
     if (gi >= 0) { const pd = !run.gs[gi].down && plannedDown(gi); return { kind: run.gs[gi].down || pd ? 'body' : 'guard', planned: pd, g: gi, x: Math.floor(run.gs[gi].x), y: Math.floor(run.gs[gi].y) }; }
     const hidden = run.gs.findIndex(G => G.active && G.down && G.hidden && G.carriedBy < 0 && Math.floor(G.x) === tx && Math.floor(G.y) === ty);
     if (hidden >= 0) return { kind: 'body', g: hidden, x: tx, y: ty };
@@ -5023,7 +5127,7 @@ else window.LEVEL = LEVEL;
     const c = run.crew[sel];
     for (let i = 0; i < run.gs.length; i++) {
       const G = run.gs[i];
-      if (G.active && !G.down && Math.hypot(G.x - c.x, G.y - c.y) < 5.5) {
+      if (G.active && !G.down && shown(i) && Math.hypot(G.x - c.x, G.y - c.y) < 5.5) {
         nearTipChecked = true;
         tip('cone', 'Lichtkegel: Im hellen vorderen Teil sieht man dich immer. Im gestreiften hinteren Teil nur, wenn du aufrecht bist (Rennen). Geduckt beim Schleichen bist du dort unsichtbar.');
         return;
@@ -5167,6 +5271,7 @@ else window.LEVEL = LEVEL;
   $('#btn-brief').addEventListener('click', () => { Sfx.init(); goImmersive(); introFromPause = false; $('#btn-start').textContent = 'Coup starten'; startBrief(); });
   function firstTip() {
     tip('select', 'Die große Figurenkarte ist die Figur in deiner Hand, auf der Karte erkennst du sie am weißen Pfeil. Boden antippen: Sie schleicht dorthin. Doppelt tippen: Sie rennt. Den kleinen Kopf daneben antippen: Du übernimmst die andere Figur. Wischen verschiebt die Karte, zwei Finger zoomen.');
+    if (fogOn()) tip('fog', 'Hier siehst du Wachen nur, wenn deine Leute sie sehen: rundum etwa acht Felder, durch Fenster und offene Türen, nicht durch Wände. Wen du nicht siehst, zeigt ein Umriss an der Stelle, wo er zuletzt war, mit der Zeit seitdem. Die Runden kennt ihr aus der Vorbereitung: Umriss antippen, „Runde zeigen“. An einer geschlossenen Tür: „Durchs Schlüsselloch“ (1 s). Schritte hinter Wänden hörst du als graue Kringel.');
   }
   $('#btn-start').addEventListener('click', () => {
     Sfx.init(); goImmersive();
@@ -5228,6 +5333,7 @@ else window.LEVEL = LEVEL;
   $('#btn-left').addEventListener('click', () => { prefs.left = !prefs.left; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
   $('#btn-hold').addEventListener('click', () => { prefs.hold = !prefs.hold; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
   $('#btn-reflex').addEventListener('click', () => { prefs.reflex = !prefs.reflex; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
+  $('#btn-allsee').addEventListener('click', () => { prefs.allSee = !prefs.allSee; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
   $('#btn-strict').addEventListener('click', () => { prefs.strict = !prefs.strict; savePrefs(); if (run) run.strict = prefs.strict; syncPause(); Sfx.init(); Sfx.tap(); });
   function syncPause() {
     $('#btn-tempo').textContent = 'Tempo: ' + Math.round(prefs.tempo * 100) + ' %';
@@ -5235,6 +5341,7 @@ else window.LEVEL = LEVEL;
     $('#btn-music').textContent = 'Musik: ' + (prefs.music ? 'an' : 'aus');
     $('#btn-strict').textContent = 'Entdeckt = Ende: ' + (prefs.strict ? 'an' : 'aus');
     $('#btn-reflex').textContent = 'Reflex-Zeitlupe: ' + (prefs.reflex ? 'an' : 'aus');
+    $('#btn-allsee').textContent = 'Alle Wachen zeigen: ' + (prefs.allSee ? 'an' : 'aus');
     $('#btn-hold').textContent = 'Zeit steht beim Zielen: ' + (prefs.hold ? 'an' : 'aus');
     $('#btn-plan').style.display = lastPlan ? '' : 'none';
     $('#btn-left').textContent = 'Steuerung: ' + (prefs.left ? 'links (Linkshänder)' : 'rechts');
@@ -5327,6 +5434,7 @@ else window.LEVEL = LEVEL;
     app.classList.toggle('ringon', !!ring);
     app.classList.toggle('briefing', mode === 'brief');
     computePreview(now);
+    if (run) updateKnow();
     if (lastPlan && lastPlan.endT == null && !sd && run && !run.crew.some(c => c.planned)) lastPlan.endT = run.t;
     if (mode === 'play' && !sd && !tipOpen && run.status === 'play' && !held() && !dbgFrozen) {
       // Reflex-Zeitlupe: kurz nach dem Entdecktwerden läuft die Zeit langsamer
@@ -5353,7 +5461,7 @@ else window.LEVEL = LEVEL;
     requestAnimationFrame(frame);
   }
   if (window.__debug) window.__dbg_aim = () => aim;
-  if (window.__debug) window.__dbg = { dropOn, thingAt, rewind, get rewindBuf() { return rewindBuf; }, get slowUntil() { return slowUntil; }, get dragPreview() { return dragPreview; }, get run() { return run; }, cam, clampCam, setMode, get mode() { return mode; }, onTap, toScreen, select, get sd() { return sd; }, prefs, get ring() { return ring; }, get preview() { return preview; }, get lastPlan() { return lastPlan; }, backToPlan, get sdCont() { return sdCont; }, get sdSel() { return sdSel; }, set scrub(v) { scrubT = v; syncScrub(); }, freeze(v) { dbgFrozen = v !== false; }, tick(n) { for (let i = 0; i < n && run.status === 'play'; i++) { run.step(); if (run.events.length) handleEvents(); } }, audio: () => ({ state: Sfx.ac && Sfx.ac.state, music: !!Music.out, stage: Music.stage, beat: Music.beat, muffled: Music.muffled }) };
+  if (window.__debug) window.__dbg = { get know() { return know; }, shown, fogOn, dropOn, thingAt, rewind, get rewindBuf() { return rewindBuf; }, get slowUntil() { return slowUntil; }, get dragPreview() { return dragPreview; }, get run() { return run; }, cam, clampCam, setMode, get mode() { return mode; }, onTap, toScreen, select, get sd() { return sd; }, prefs, get ring() { return ring; }, get preview() { return preview; }, get lastPlan() { return lastPlan; }, backToPlan, get sdCont() { return sdCont; }, get sdSel() { return sdSel; }, set scrub(v) { scrubT = v; syncScrub(); }, freeze(v) { dbgFrozen = v !== false; }, tick(n) { for (let i = 0; i < n && run.status === 'play'; i++) { run.step(); if (run.events.length) handleEvents(); } }, audio: () => ({ state: Sfx.ac && Sfx.ac.state, music: !!Music.out, stage: Music.stage, beat: Music.beat, muffled: Music.muffled }) };
   introCards(); newRun(); syncPause();
   requestAnimationFrame((t) => { last = t; frame(t); });
 })();
