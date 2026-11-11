@@ -515,7 +515,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       <button class="btn" id="btn-left">Steuerung: rechts</button>
       <button class="btn" id="btn-hold">Zeit steht beim Zielen: an</button>
       <button class="btn" id="btn-reflex">Reflex-Zeitlupe: an</button>
-      <button class="btn" id="btn-allsee">Alle Wachen zeigen: aus</button>
+      <button class="btn" id="btn-hard">Schwer: nur Gesehenes zeigen: aus</button>
       <p class="note">Im Anwesen siehst du Wachen nur, wenn deine Leute sie sehen. Wer das zu schwer findet, schaltet hier alle sichtbar.</p>
       <button class="btn" id="btn-strict">Entdeckt = Ende: aus</button>
       <p class="note">Aus: Wer entdeckt wird, kann noch fliehen, sich verstecken oder den Verfolger von hinten ausschalten. Vorbei ist es erst, wenn eine Wache dich packt. An: Jeder Blickkontakt beendet den Coup.</p>
@@ -2252,7 +2252,6 @@ else window.LEVEL = LEVEL;
     intro: 'Das Bernstein-Diadem liegt in der Galerie des Anwesens, hinter einer verschlossenen Tür in einer Vitrine. Holt es und bringt alle zurück zum Wagen.',
     ways: 'Aufs Gelände kommt ihr durchs bewachte Haupttor, das verschlossene Lieferantentor, über den Efeu an der Westmauer, durch die Lücke in der Nordhecke oder durch den Kanal. Ins Haus durch Türen, Fenster und den Lüftungsschacht über der Terrasse.',
     blurb: 'Großes Anwesen · fünf Wege aufs Gelände',
-    fog: true,   // Wissen statt Nebel: Wachen sieht man nur, wenn die Crew sie sieht
     brief: [
       { who: 'leo', at: [14, 28], text: 'Anwesen Halberg, das Landhaus der Familie. Das Bernstein-Diadem kam 1944 aus Valmora hierher, genau wie das Ei. Diesmal ist alles größer: Mauer, Park, zwei Flügel, neun Leute im Dienst.' },
       { who: 'mara', at: [23, 25], text: 'Vorne das Haupttor. Haas sitzt im Pförtnerhaus und schaut durchs Fenster auf die Auffahrt. Brandt dreht seine Runde durch den Hof, raucht an der Hecke und hält bei Haas ein Schwätzchen. Durchs Tor nur mit gutem Timing.' },
@@ -3252,7 +3251,7 @@ else window.LEVEL = LEVEL;
   /* ---------- Einstellungen ---------- */
   const KEY = 'lockdown.p1';
   const TEMPOS = [0.5, 0.7, 0.85, 1];
-  const prefs = { tempo: 0.7, sound: true, music: true, briefed: false, seen: [], allSee: false, tips: [], strict: false, reflex: !(window.matchMedia && matchMedia('(pointer: fine)').matches), hold: true, left: false, crew: ['leo', 'mara'], level: null };
+  const prefs = { tempo: 0.7, sound: true, music: true, briefed: false, seen: [], hardSight: false, tips: [], strict: false, reflex: !(window.matchMedia && matchMedia('(pointer: fine)').matches), hold: true, left: false, crew: ['leo', 'mara'], level: null };
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
     if (TEMPOS.includes(s.tempo)) prefs.tempo = s.tempo;
@@ -3265,7 +3264,7 @@ else window.LEVEL = LEVEL;
     if (typeof s.hold === 'boolean') prefs.hold = s.hold;
     if (typeof s.left === 'boolean') prefs.left = s.left;
     if (Array.isArray(s.crew) && s.crew.length === 2 && s.crew.every(id => LEVEL.crew.some(c => c.id === id))) prefs.crew = s.crew;
-    if (typeof s.allSee === 'boolean') prefs.allSee = s.allSee;
+    if (typeof s.hardSight === 'boolean') prefs.hardSight = s.hardSight;
     if (Array.isArray(s.seen)) prefs.seen = s.seen.filter(t => typeof t === 'string');
     if (LEVELS.some(l => l.id === s.level)) prefs.level = s.level;
   } catch (e) { /* ohne Speicher */ }
@@ -3634,14 +3633,15 @@ else window.LEVEL = LEVEL;
   const KITTEL = { body: '#4f8f86', sleeve: '#447d75', apron: '#d8e6e2', scarf: null };
   const takenLook = (i) => Object.assign({}, R.guardLook(run.lv, i), { body: '#cfc6b8', sleeve: '#cfc6b8', apron: null });
 
-  /* ---------- Wissen statt Nebel ----------
-     In Levels mit fog (Anwesen) zeigt die Karte eine Wache nur, wenn die Crew sie gerade sieht (rundum SIGHT Felder,
+  /* ---------- Wissen statt Nebel (nur mit dem Schalter „Schwer“, seit 4.3) ----------
+     Standard: Man sieht alle Wachen, weil man ohne Wissen nicht planen kann (Florians Test am 11.11.).
+     Mit „Schwer: nur Gesehenes zeigen“ zeigt die Karte eine Wache nur, wenn die Crew sie gerade sieht (rundum SIGHT Felder,
      Wände und geschlossene Türen halten den Blick auf, Fenster und offene Türen nicht), durchs Schlüsselloch späht oder wenn
      die Wache selbst jemanden von der Crew sieht. Sonst bleibt ein Umriss an der letzten bekannten Stelle. Zu Beginn kennt die
      Crew alle aus der Vorbereitung: Umriss an der Startstelle, Runden sind bekannt. Nur Darstellung, die Spiellogik weiß davon nichts. */
   const SIGHT = 8, PEEK_R = 10, PEEK_FOV = .62, PEEK_HOLD = 60, HEAR_STEPS = 4;
   let know = [];
-  const fogOn = () => !!(LEVEL.fog && !prefs.allSee);
+  const fogOn = () => !!prefs.hardSight;
   function resetKnow() { know = run.gs.map(G => ({ live: !fogOn(), seen: -1, x: G.x, y: G.y, ang: G.ang, prep: true, stepAt: 0 })); }
   // Späht die Figur gerade durch eine Tür? Solange sie schaut und eine Sekunde danach
   function peekView(c) {
@@ -3686,6 +3686,62 @@ else window.LEVEL = LEVEL;
     });
   }
   const shown = (i) => !fogOn() || !!(know[i] && know[i].live);
+
+  /* ---------- Pfeile am Rand (4.3) ----------
+     Wer nah an der Crew ist, aber gerade nicht im Bild, bekommt einen Pfeil am Bildschirmrand, damit niemand aus dem Nichts
+     auftaucht. Er pulsiert, wenn die Wache auf die Crew zuläuft oder jagt. Antippen holt sie ins Bild.
+     Respektiert „Schwer“: Wen die Crew nicht sieht, der bekommt keinen Pfeil. Reine Darstellung. */
+  const EDGE_NEAR = 10, EDGE_PAD = 26, EDGE_TOP = 66, EDGE_BOTTOM = 96;   // oben Platz für Ziel und Knöpfe, unten für Figuren und Knöpfe
+  let edgeArrows = [], camGlide = null;
+  function edgeGuards() {
+    const out = [];
+    run.gs.forEach((G, i) => {
+      if (!G.active || G.down || G.carriedBy >= 0 || !shown(i)) return;
+      const [sx, sy] = toScreen(G.x, G.y);
+      if (sx >= 0 && sy >= 0 && sx <= vw && sy <= vh) return;
+      let nd = Infinity, nc = null;
+      for (const c of run.crew) { if (c.caught) continue; const d = Math.hypot(G.x - c.x, G.y - c.y); if (d < nd) { nd = d; nc = c; } }
+      const hot = G.purpose === 'chase' || G.purpose === 'report';
+      if (!nc || (nd > EDGE_NEAR && !hot)) return;
+      const toward = !!G.moving && Math.cos(G.ang - Math.atan2(nc.y - G.y, nc.x - G.x)) > .5;
+      out.push({ g: i, sx, sy, d: nd, toward, hot });
+    });
+    return out;
+  }
+  function drawEdgeArrows(g, now) {
+    edgeArrows = [];
+    if (mode !== 'play' || run.status !== 'play') return;
+    const x0 = EDGE_PAD, x1 = vw - EDGE_PAD, y0 = EDGE_TOP, y1 = Math.max(y0 + 40, vh - EDGE_BOTTOM);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const pts = edgeGuards().sort((p, q) => p.d - q.d).map(a => {
+      const dx = a.sx - cx, dy = a.sy - cy;
+      const t = Math.min(dx ? (dx > 0 ? x1 - cx : cx - x0) / Math.abs(dx) : Infinity, dy ? (dy > 0 ? y1 - cy : cy - y0) / Math.abs(dy) : Infinity);
+      return Object.assign(a, { x: cx + dx * t, y: cy + dy * t, ang: Math.atan2(dy, dx), sus: run.gs[a.g].sus > 0 });
+    });
+    // Liegen Pfeile übereinander, wird einer mit Zahl daraus. Er zeigt auf die nächste Wache, antippen holt sie ins Bild
+    const groups = [];
+    for (const a of pts) {
+      const q = groups.find(q => Math.hypot(q.x - a.x, q.y - a.y) < 34);
+      if (q) { q.all.push(a.g); q.hot = q.hot || a.hot; q.toward = q.toward || a.toward; q.sus = q.sus || a.sus; }
+      else groups.push(Object.assign({}, a, { all: [a.g] }));
+    }
+    for (const a of groups) {
+      const col = a.hot ? '#ff4a3d' : a.sus ? '#ffc35c' : '#eef3fa';
+      const pul = (a.toward || a.hot) ? (reduceMotion ? 1 : .5 + .5 * Math.sin(now / 150)) : 0;
+      g.save(); g.translate(a.x, a.y);
+      g.fillStyle = 'rgba(5,9,18,.8)'; circle(g, 0, 0, 15); g.fill();
+      if (pul) { g.strokeStyle = rgba(col, .35 + .5 * pul); g.lineWidth = 2; circle(g, 0, 0, 15 + 4 * pul); g.stroke(); }
+      g.save(); g.rotate(a.ang); g.beginPath(); g.moveTo(10, 0); g.lineTo(-6, -8); g.lineTo(-2, 0); g.lineTo(-6, 8); g.closePath();
+      g.fillStyle = col; g.fill(); g.restore();
+      if (a.all.length > 1) {
+        g.fillStyle = col; circle(g, 12, -12, 8); g.fill();
+        g.font = font(10); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#05090f'; g.fillText(String(a.all.length), 12, -11.5);
+      }
+      g.restore();
+      edgeArrows.push({ x: a.x, y: a.y, g: a.g, all: a.all, toward: a.toward, hot: a.hot });
+    }
+  }
+
   // Umriss einer nicht sichtbaren Wache: wo sie zuletzt war
   function drawGhost(g, i, P) {
     const K = know[i]; if (!K || K.live || !run.gs[i].active) return;
@@ -3904,6 +3960,7 @@ else window.LEVEL = LEVEL;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     run.gs.forEach((G, i) => { if (G.active && shown(i)) drawStatus(g, G, i); else if (G.active && !G.down) ghostTag(g, i); });
     run.crew.forEach((c, i) => drawCrewTag(g, c, i));
+    drawEdgeArrows(g, now);
     if (sd) {
       const used = new Map();
       run.crew.forEach((c, ci) => { const tn = taintOf(sd[ci]); chain(ci, sd[ci]).forEach((seg, k) => {
@@ -4744,6 +4801,8 @@ else window.LEVEL = LEVEL;
   function onTap(sx, sy) {
     if (mode !== 'play' || run.status !== 'play' || tipOpen) return;
     Sfx.init();
+    const ea = !aim && edgeArrows.find(a => Math.hypot(a.x - sx, a.y - sy) < 24);
+    if (ea) { const G = run.gs[ea.g]; if (ring) closeRing(); camGlide = { x: G.x, y: G.y }; ripple(G.x, G.y, '#eef3fa', .3, 1.1, 700); Sfx.tap(); return; }
     const [wx, wy] = toWorld(sx, sy), tx = Math.floor(wx), ty = Math.floor(wy), lv = run.lv;
     const hadRing = !!ring;
     if (ring) { closeRing(); }
@@ -4900,7 +4959,7 @@ else window.LEVEL = LEVEL;
       const [a, b] = [...ptrs.values()];
       cam.z = gesture.z0 * Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, gesture.d0);
       const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      cam.x = gesture.w0[0] - (mx - vw / 2) / cam.z; cam.y = gesture.w0[1] - (my - vh / 2) / cam.z; clampCam();
+      camGlide = null; cam.x = gesture.w0[0] - (mx - vw / 2) / cam.z; cam.y = gesture.w0[1] - (my - vh / 2) / cam.z; clampCam();
     }
   });
   const up = (e) => {
@@ -4936,7 +4995,7 @@ else window.LEVEL = LEVEL;
     e.preventDefault();
     const w = toWorld(e.offsetX, e.offsetY);
     cam.z *= Math.exp(-e.deltaY * .0015); clampCam();
-    cam.x = w[0] - (e.offsetX - vw / 2) / cam.z; cam.y = w[1] - (e.offsetY - vh / 2) / cam.z; clampCam();
+    camGlide = null; cam.x = w[0] - (e.offsetX - vw / 2) / cam.z; cam.y = w[1] - (e.offsetY - vh / 2) / cam.z; clampCam();
   }, { passive: false });
 
   $('#crew').addEventListener('click', (e) => { if (pressFired) { pressFired = false; return; } const b = e.target.closest('[data-c]'); if (b && mode === 'play' && !tipOpen) select(+b.dataset.c); });
@@ -5437,7 +5496,7 @@ else window.LEVEL = LEVEL;
   $('#btn-left').addEventListener('click', () => { prefs.left = !prefs.left; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
   $('#btn-hold').addEventListener('click', () => { prefs.hold = !prefs.hold; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
   $('#btn-reflex').addEventListener('click', () => { prefs.reflex = !prefs.reflex; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
-  $('#btn-allsee').addEventListener('click', () => { prefs.allSee = !prefs.allSee; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
+  $('#btn-hard').addEventListener('click', () => { prefs.hardSight = !prefs.hardSight; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
   $('#btn-strict').addEventListener('click', () => { prefs.strict = !prefs.strict; savePrefs(); if (run) run.strict = prefs.strict; syncPause(); Sfx.init(); Sfx.tap(); });
   function syncPause() {
     $('#btn-tempo').textContent = 'Tempo: ' + Math.round(prefs.tempo * 100) + ' %';
@@ -5445,7 +5504,7 @@ else window.LEVEL = LEVEL;
     $('#btn-music').textContent = 'Musik: ' + (prefs.music ? 'an' : 'aus');
     $('#btn-strict').textContent = 'Entdeckt = Ende: ' + (prefs.strict ? 'an' : 'aus');
     $('#btn-reflex').textContent = 'Reflex-Zeitlupe: ' + (prefs.reflex ? 'an' : 'aus');
-    $('#btn-allsee').textContent = 'Alle Wachen zeigen: ' + (prefs.allSee ? 'an' : 'aus');
+    $('#btn-hard').textContent = 'Schwer: nur Gesehenes zeigen: ' + (prefs.hardSight ? 'an' : 'aus');
     $('#btn-hold').textContent = 'Zeit steht beim Zielen: ' + (prefs.hold ? 'an' : 'aus');
     $('#btn-plan').style.display = lastPlan ? '' : 'none';
     $('#btn-left').textContent = 'Steuerung: ' + (prefs.left ? 'links (Linkshänder)' : 'rechts');
@@ -5562,13 +5621,14 @@ else window.LEVEL = LEVEL;
       const ey = gesture.y < m ? -(m - gesture.y) / m : gesture.y > vh - m ? (gesture.y - (vh - m)) / m : 0;
       if (ex || ey) { cam.x += ex * dt * 7; cam.y += ey * dt * 7; clampCam(); }
     }
+    if (camGlide && mode === 'play') { const k = Math.min(1, dt * 7); cam.x += (camGlide.x - cam.x) * k; cam.y += (camGlide.y - cam.y) * k; clampCam(); if (Math.hypot(camGlide.x - cam.x, camGlide.y - cam.y) < .05) camGlide = null; }
     if (camTarget && mode === 'brief') { const k = Math.min(1, dt * 2.2); cam.x += (camTarget.x - cam.x) * k; cam.y += (camTarget.y - cam.y) * k; clampCam(); }
     if (fx.flash > 0) fx.flash = Math.max(0, fx.flash - dt * 2);
     draw(now); hud();
     requestAnimationFrame(frame);
   }
   if (window.__debug) window.__dbg_aim = () => aim;
-  if (window.__debug) window.__dbg = { get abl() { return abl; }, parkPlan, startAbl, editAbl, get know() { return know; }, shown, fogOn, dropOn, thingAt, rewind, get rewindBuf() { return rewindBuf; }, get slowUntil() { return slowUntil; }, get dragPreview() { return dragPreview; }, get run() { return run; }, cam, clampCam, setMode, get mode() { return mode; }, onTap, toScreen, select, get sd() { return sd; }, prefs, get ring() { return ring; }, get preview() { return preview; }, get lastPlan() { return lastPlan; }, backToPlan, get sdCont() { return sdCont; }, get sdSel() { return sdSel; }, set scrub(v) { scrubT = v; syncScrub(); }, freeze(v) { dbgFrozen = v !== false; }, tick(n) { for (let i = 0; i < n && run.status === 'play'; i++) { run.step(); if (run.events.length) handleEvents(); } }, audio: () => ({ state: Sfx.ac && Sfx.ac.state, music: !!Music.out, stage: Music.stage, beat: Music.beat, muffled: Music.muffled }) };
+  if (window.__debug) window.__dbg = { get abl() { return abl; }, parkPlan, startAbl, editAbl, get know() { return know; }, shown, fogOn, get edgeArrows() { return edgeArrows; }, get camGlide() { return camGlide; }, dropOn, thingAt, rewind, get rewindBuf() { return rewindBuf; }, get slowUntil() { return slowUntil; }, get dragPreview() { return dragPreview; }, get run() { return run; }, cam, clampCam, setMode, get mode() { return mode; }, onTap, toScreen, select, get sd() { return sd; }, prefs, get ring() { return ring; }, get preview() { return preview; }, get lastPlan() { return lastPlan; }, backToPlan, get sdCont() { return sdCont; }, get sdSel() { return sdSel; }, set scrub(v) { scrubT = v; syncScrub(); }, freeze(v) { dbgFrozen = v !== false; }, tick(n) { for (let i = 0; i < n && run.status === 'play'; i++) { run.step(); if (run.events.length) handleEvents(); } }, audio: () => ({ state: Sfx.ac && Sfx.ac.state, music: !!Music.out, stage: Music.stage, beat: Music.beat, muffled: Music.muffled }) };
   introCards(); newRun(); syncPause();
   requestAnimationFrame((t) => { last = t; frame(t); });
 })();
