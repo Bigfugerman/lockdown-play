@@ -426,6 +426,18 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
 .news strong { font-size: 15px; line-height: 1.3; }
 .news span { font-size: 12px; color: var(--muted); line-height: 1.4; }
 #app.briefing #dock, #app.briefing #hud .ibtn, #app.briefing #goal { visibility: hidden; }
+
+/* Bereite Abläufe: über dem Showdown-Knopf, je ein Startknopf mit den beteiligten Figuren und ein kleines ✕ */
+#abl { position: absolute; right: calc(env(safe-area-inset-right) + 10px); bottom: calc(env(safe-area-inset-bottom) + 96px); display: flex; flex-direction: column-reverse; gap: 6px; z-index: 6; }
+#abl:empty { display: none; }
+#abl .ab { display: flex; align-items: stretch; gap: 2px; }
+#abl .go { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 10px; border-radius: 20px 6px 6px 20px; border: 1px solid var(--amber); background: rgba(5,9,18,.82); color: var(--amber); font: 700 14px/1 inherit; cursor: pointer; touch-action: none; -webkit-user-select: none; user-select: none; }
+#abl .go b { letter-spacing: .04em; }
+#abl .go span { display: flex; gap: 3px; }
+#abl .go i { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; font: 700 10px/1 sans-serif; font-style: normal; color: #fff; }
+#abl .x { width: 30px; border-radius: 6px 20px 20px 6px; border: 1px solid rgba(255,255,255,.18); background: rgba(5,9,18,.82); color: #c9d3df; cursor: pointer; display: grid; place-items: center; padding: 0; }
+#abl .x svg { width: 12px; height: 12px; }
+#app.left #abl { right: auto; left: calc(env(safe-area-inset-left) + 10px); }
 </style>
 </head>
 <body>
@@ -454,6 +466,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
     <div id="crew"></div>
     <div id="plan"></div>
     <div id="acts"></div>
+    <div id="abl" aria-label="Bereite Abläufe"></div>
     <button id="sdbtn" aria-label="Showdown"><svg viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M13 7v6l4 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span id="sdlabel">Show&shy;down</span></button>
   </footer>
 
@@ -471,11 +484,11 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
         <li><b>Schleichen/Rennen</b><span>Einmal tippen = hinschleichen, geduckt und leise. Doppelt tippen = hinrennen, schnell, aber laut: Die Schallwellen zeigen, wer dich hört.</span></li>
         <li><b>Ziel antippen</b><span>Wache, Tür, Fenster, Schacht, Bewusstlose: Das Rad zeigt, was die Crew damit kann und wer es macht.</span></li>
         <li><b>Figur ziehen</b><span>zeigt vorher die Fußspuren, rot = da sieht dich gerade jemand. Auf ein Ziel ziehen = das Naheliegende (betäuben, tragen, knacken, klettern). Zurück auf die Figur = abbrechen.</span></li>
-        <li><b>Showdown</b><span>Zeit steht. Für jede Figur beliebig viele Schritte planen: Wege, Rennen (doppelt tippen), Warten, Betäuben und danach Fesseln oder Tragen. Die Karte zeigt eure Pläne mit Zeiten, der Regler zeigt, wo eure Leute wann stehen. Was die Wachen tun, musst du selbst einschätzen. Signale stimmen Figuren ab (eine gibt ⚑A, die andere wartet darauf). Wird eine Figur entdeckt, stoppt ihr Plan (pro Figur umstellbar). Schritt antippen = markieren und ändern, Wegpunkte ziehen, Zurück. LOS startet alles gleichzeitig. Geht etwas schief: „Plan“ bringt dich zurück vor LOS, der Plan ist noch da.</span></li>
+        <li><b>Showdown</b><span>Zeit steht. Für jede Figur beliebig viele Schritte planen: Wege, Rennen (doppelt tippen), Warten, Betäuben und danach Fesseln oder Tragen. Die Karte zeigt eure Pläne mit Zeiten, der Regler zeigt, wo eure Leute wann stehen. Was die Wachen tun, musst du selbst einschätzen. Signale stimmen Figuren ab (eine gibt ⚑A, die andere wartet darauf). Wird eine Figur entdeckt, stoppt ihr Plan (pro Figur umstellbar). Schritt antippen = markieren und ändern, Wegpunkte ziehen, Zurück. LOS startet alles gleichzeitig. Geht etwas schief: „Plan“ bringt dich zurück vor LOS, der Plan ist noch da. „Später“ statt LOS legt den Plan als Ablauf bereit und die Zeit läuft weiter: ▶ 1 bis ▶ 4 über dem Showdown-Knopf startet ihn im richtigen Moment, gedrückt halten ändert ihn.</span></li>
         <li><b>Wischen / 2 Finger</b><span>Karte verschieben / zoomen</span></li>
       </ul>
       <ul class="keys" id="pc-keys" hidden>
-        <li><b>PC</b><span>Linksklick wie Antippen · Doppelklick oder Rechtsklick auf den Boden = hinrennen · Rechtsklick aufs Ziel = Naheliegendes sofort · Maus über Wache = ihre Runde · 1/2 oder Tab = Figur · Leertaste = Showdown/LOS · Q Münze · W Pfiff · E Ablegen · R Warten · F Signal · U Zurück · P zum letzten Plan · I Profil · Z zurückspulen · S/L Speichern/Laden</span></li>
+        <li><b>PC</b><span>Linksklick wie Antippen · Doppelklick oder Rechtsklick auf den Boden = hinrennen · Rechtsklick aufs Ziel = Naheliegendes sofort · Maus über Wache = ihre Runde · 1/2 oder Tab = Figur · Leertaste = Showdown/LOS · Q Münze · W Pfiff · E Ablegen · R Warten · F Signal · U Zurück · P zum letzten Plan · B Später (Ablauf bereitlegen) · 5–8 Ablauf 1–4 starten · I Profil · Z zurückspulen · S/L Speichern/Laden</span></li>
       </ul>
       <p class="note">Lichtkegel: Im hellen vorderen Teil sieht man dich immer. Im gestreiften Teil nur aufrecht, geduckt nicht. Betäubte wachen nach 45 s auf und schlagen Alarm, also fesseln. Speichern oft.</p>
       <button class="btn primary" id="btn-start">Coup starten</button>
@@ -1527,7 +1540,10 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   };
   Run.prototype.planAll = function (plans, opts) {
     if (this.status !== 'play') return plans.map(() => ({ ok: false, why: '' }));
-    this.signals = [];
+    // Signale gelten pro Ablauf: Nur die Buchstaben, die der neue Plan selbst gibt, fangen neu an.
+    // So kann ein später gestarteter Ablauf auf ein Signal warten, das ein laufender gibt oder schon gegeben hat.
+    const fresh = new Set(); plans.forEach(l => l.forEach(o => { if (o.type === 'signal') fresh.add(o.sig); }));
+    this.signals = this.signals.filter(sg => !fresh.has(sg));
     plans.forEach((list, ci) => {
       const c = this.crew[ci];
       if (!list.length || c.caught) return;
@@ -3490,7 +3506,7 @@ else window.LEVEL = LEVEL;
 
   function newRun() {
     ACTIVE = Object.assign({}, LEVEL, { crew: LEVEL.crew.filter(c => prefs.crew.includes(c.id)) });
-    run = new C.Run(ACTIVE); run.strict = prefs.strict; know = []; quick = null; sel = 0; aim = null; sd = null; ring = null; routeShow = null;
+    run = new C.Run(ACTIVE); run.strict = prefs.strict; know = []; abl = []; ablEditN = 0; quick = null; sel = 0; aim = null; sd = null; ring = null; routeShow = null;
     rewindBuf = []; lastSnapT = -1e9; rewinds = 0; slowUntil = 0; nearTipChecked = false; lastPlan = null;
     fx.ripples.length = 0; fx.fields.length = 0; fx.flash = 0;
     $('#btn-load').disabled = true;
@@ -3561,6 +3577,10 @@ else window.LEVEL = LEVEL;
   let sdSel = -1, sdUndo = [], sdCont = [];
   // Letzter Plan: Stand vor LOS plus Plan, damit man nach einem Fehlschlag genau dorthin zurück kann
   let lastPlan = null;
+  // Bereitgelegte Abläufe: im Showdown geplant, dann „Später“. Die Zeit läuft weiter, jeder startet einzeln mit einem Tipp.
+  // { sd: Schritte je Figur, cont: „Entdeckt: weiter“ je Figur, n: Nummer 1–4 }
+  let abl = [], ablEditN = 0;
+  const ABL_MAX = 4;
   const SIG_COL = { A: '#ff5ea8', B: '#5ef0ff', C: '#ffd36b', D: '#b9a6ff' };
   const STAY = ['coin', 'whistle', 'drop', 'wait', 'signal', 'waitsig'];   // Schritte, bei denen man stehen bleibt
   // Schritte, deren Ort davon abhängt, wohin eine Person bis dahin läuft: der Schritt auf die Person selbst und alles,
@@ -3826,6 +3846,8 @@ else window.LEVEL = LEVEL;
     // Rad an einer verschlossenen Tür: zeigen, wer das Knacken hören würde
     if (ring && ring.kind === 'radio' && !radioIsOn(ring.x, ring.y)) drawHearing(g, P, now, run.soundAt([ring.x, ring.y], C.RADIO_NOISE), C.RADIO_NOISE, '#c99bff');
     if (ring && (ring.kind === 'locked' || ring.kind === 'case') && run.crew[sel].tool) { const pk = run.pickInfo(sel, ring.x, ring.y); drawHearing(g, P, now, run.soundAt([ring.x, ring.y], pk.noise), pk.noise, '#eef3fa'); }
+    // Bereite Abläufe: dünn gepunktet, mit Nummer am Ende jeder Kette
+    abl.forEach(A => run.crew.forEach((c, ci) => { const l = A.sd[ci]; if (l && l.length && !c.caught) drawAblChain(g, P, now, ci, chain(ci, l), A.n); }));
     // Pläne: im Showdown die neuen, sonst die noch offenen Schritte
     run.crew.forEach((c, ci) => {
       const list = sd ? sd[ci] : c.queue;
@@ -3946,6 +3968,16 @@ else window.LEVEL = LEVEL;
     let pos = c.order ? targetOf(c.order, [c.x, c.y]) : [c.x, c.y];
     if (c.path.length) { const l = c.path[c.path.length - 1]; pos = [l[0] + .5, l[1] + .5]; }
     return list.map(o => { const t = targetOf(o, pos); const seg = { o, from: pos, to: t }; pos = STAY.includes(o.type) ? pos : t; return seg; });
+  }
+  function drawAblChain(g, P, now, ci, segs, n) {
+    const col = PLAN_COL[ci % PLAN_COL.length];
+    g.strokeStyle = rgba(col, .4); g.lineWidth = 2 * P; g.setLineDash([.08, .14]); g.beginPath();
+    for (const s of segs) { if (s.from[0] === s.to[0] && s.from[1] === s.to[1]) continue; g.moveTo(s.from[0], s.from[1]); g.lineTo(s.to[0], s.to[1]); }
+    g.stroke(); g.setLineDash([]);
+    const end = segs[segs.length - 1].to;
+    g.fillStyle = 'rgba(5,9,18,.85)'; circle(g, end[0], end[1], .26); g.fill();
+    g.strokeStyle = rgba(col, .8); g.lineWidth = 1.5 * P; circle(g, end[0], end[1], .26); g.stroke();
+    g.fillStyle = col; g.font = '700 0.3px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(n), end[0], end[1] + .01);
   }
   function drawChain(g, P, now, ci, segs, strong) {
     const col = PLAN_COL[ci % PLAN_COL.length];
@@ -4502,7 +4534,7 @@ else window.LEVEL = LEVEL;
       });
       $('#crew').innerHTML = html;
     }
-    renderPlan(); renderActs();
+    renderPlan(); renderActs(); renderAbl();
     const lab = !sd ? 'Show&shy;down' : !preview ? 'Los' : preview.warn ? 'Los<small class="warn">⚠ ' + secs(preview.warn.t) + '</small>' : 'Los<small class="ok">' + secs(preview.end) + '</small>';
     if ($('#sdlabel').innerHTML !== lab) $('#sdlabel').innerHTML = lab;
     app.classList.toggle('sd', !!sd);
@@ -4566,6 +4598,7 @@ else window.LEVEL = LEVEL;
     flag: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 18V3M5 4h9l-2 3 2 3H5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>',
     clock: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 6v4l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     undo: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5L3 9l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 9h9a4 4 0 0 1 0 8H8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    pause: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 4v12M13 4v12" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
     run: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="12" cy="3.5" r="2" fill="currentColor"/><path d="M11 6l-2 6 4 2-1 4M9 12l-4 2M11 7l4 3 2-1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   };
   function describe(o) {
@@ -4623,13 +4656,14 @@ else window.LEVEL = LEVEL;
       if (c.disguise && !sd) list.push(['undress', ICON.shirt, 'Kittel aus', false]);
       if (sd) list.push(['wait', ICON.clock, '+1 s', false]);
       if (sd) list.push(['signal', ICON.flag, 'Signal', false]);
+      if (sd) list.push(['park', ICON.pause, 'Später', abl.length >= ABL_MAX && sd.some(l => l.length)]);
       if (!sd && lastPlan && (lastPlan.endT == null || run.t - lastPlan.endT < rate() * 10)) list.push(['replan', ICON.undo, 'Plan', false]);
       if (sd) list.push(['undo', ICON.undo, 'Zurück', !sdUndo.length]);
     }
     const key = list.map(a => a.join()).join('|');
     if (key === actsKey) return;
     actsKey = key;
-    const KEYS = { coin: 'Q', whistle: 'W', drop: 'E', wait: 'R', undo: 'U', signal: 'F', replan: 'P' };
+    const KEYS = { coin: 'Q', whistle: 'W', drop: 'E', wait: 'R', undo: 'U', signal: 'F', replan: 'P', park: 'B' };
     $('#acts').innerHTML = list.map(([id, ic, label, dis, on, cls]) => `<button class="act${on ? ' on' : ''}${cls ? ' ' + cls : ''}" data-a="${id}" aria-label="${label}"${dis ? ' disabled' : ''}>${ic}<span>${label}</span>${finePointer && KEYS[id] ? `<kbd>${KEYS[id]}</kbd>` : ''}</button>`).join('');
   }
 
@@ -4966,6 +5000,7 @@ else window.LEVEL = LEVEL;
       return;
     }
     if (a === 'replan') { backToPlan(); return; }
+    if (a === 'park') { parkPlan(); return; }
     if (a === 'undress') { issue({ type: 'undress' }); return; }
     if (a === 'stop') { run.order(sel, { type: 'move', x: c.move ? c.move.to[0] : c.tile[0], y: c.move ? c.move.to[1] : c.tile[1] }); Sfx.deny(); return; }
   });
@@ -4992,18 +5027,81 @@ else window.LEVEL = LEVEL;
       tip('sd', 'Showdown: Die Zeit steht. Tippe Ziele für die ausgewählte Figur, mehrere hintereinander gehen auch. Mit ✕ löschst du einzelne Schritte. Dann die andere Figur wählen und planen. LOS startet alles gleichzeitig.');
       return;
     }
-    const plans = prepPlans(sd);
-    lastPlan = sd.some(l => l.length) ? { t: run.t, snap: run.snapshot(), sd: JSON.stringify(sd), cont: sdCont.slice(), endT: null } : lastPlan;
-    sd = null; sdSel = -1; preview = null; scrubT = -1; syncScrub();
+    const list = sd, cont = sdCont.slice();
+    sd = null; sdSel = -1; preview = null; scrubT = -1; ablEditN = 0; syncScrub();
+    launchPlan(list, cont, 0);
+  });
+  // Plan starten: aus dem Showdown (LOS) oder einen bereitgelegten Ablauf
+  function launchPlan(list, cont, n) {
+    const plans = prepPlans(list);
+    if (list.some(l => l.length)) lastPlan = { t: run.t, snap: run.snapshot(), sd: JSON.stringify(list), cont: cont.slice(), endT: null, abl: JSON.stringify(abl), n };
     const synced = markSync(plans);
-    let n = 0;
-    run.planAll(plans, sdCont.map(cont => ({ cont }))).forEach((r, ci) => {
+    let k = 0;
+    run.planAll(plans, cont.map(c => ({ cont: c }))).forEach((r, ci) => {
       if (!plans[ci].length) return;
-      if (r.ok) n++; else if (r.why) toast(run.crew[ci].name + ': ' + r.why, true);
+      if (r.ok) k++; else if (r.why) toast(run.crew[ci].name + ': ' + r.why, true);
     });
     Sfx.go(); buzz([20, 30, 20]);
-    toast(n ? (synced ? 'Los! Die Betäubungen passieren gleichzeitig.' : 'Los!') : 'Weiter geht’s.', false, synced ? 1800 : 900);
-  });
+    const who = n ? 'Ablauf ' + n + ' läuft' : 'Los';
+    toast(k ? (synced ? who + '! Die Betäubungen passieren gleichzeitig.' : who + '!') : 'Weiter geht’s.', false, synced ? 1800 : 900);
+  }
+  // Im Showdown: Plan als Ablauf bereitlegen, die Zeit läuft weiter
+  function parkPlan() {
+    if (!sd) return;
+    if (!sd.some(l => l.length)) { sd = null; sdSel = -1; preview = null; scrubT = -1; ablEditN = 0; syncScrub(); toast('Weiter geht’s.', false, 900); return; }
+    if (abl.length >= ABL_MAX) { toast('Höchstens ' + ABL_MAX + ' Abläufe bereit. Starte oder verwirf erst einen.', true); Sfx.deny(); return; }
+    const used = abl.map(a => a.n), n = ablEditN && !used.includes(ablEditN) ? ablEditN : [1, 2, 3, 4].find(k => !used.includes(k));
+    abl.push({ sd: JSON.parse(JSON.stringify(sd)), cont: sdCont.slice(), n });
+    abl.sort((a, b) => a.n - b.n);
+    sd = null; sdSel = -1; preview = null; scrubT = -1; ablEditN = 0; syncScrub();
+    Sfx.tap(); buzz(12);
+    toast('Ablauf ' + n + ' liegt bereit. Die Zeit läuft. Tipp auf ▶ ' + n + ', wenn der Moment da ist.', false, 2600);
+    tip('abl', 'Bereitgelegte Abläufe stehen rechts über dem Showdown-Knopf. Antippen startet den Ablauf sofort, ohne dass die Zeit anhält. Gedrückt halten öffnet ihn wieder im Showdown zum Ändern, ✕ verwirft ihn. Bis zu vier gleichzeitig, jeder für sich: Wer in einem Ablauf nichts zu tun hat, macht einfach weiter.');
+  }
+  function startAbl(k) {
+    const A = abl[k]; if (!A || mode !== 'play' || sd || run.status !== 'play') return;
+    abl.splice(k, 1); launchPlan(A.sd, A.cont, A.n);
+  }
+  function editAbl(k) {
+    const A = abl[k]; if (!A || mode !== 'play' || sd || run.status !== 'play') return;
+    abl.splice(k, 1);
+    sd = run.crew.map((c, ci) => (A.sd[ci] || []).slice()); sdCont = run.crew.map((c, ci) => !!A.cont[ci]); ablEditN = A.n;
+    sdSel = -1; sdUndo = []; preview = null; previewKey = ''; scrubT = -1; aim = null; Sfx.sd(); buzz(20);
+    toast('Ablauf ' + A.n + ' im Showdown. Ändern, dann LOS oder wieder „Später“.', false, 2200);
+  }
+  function dropAbl(k) { const A = abl[k]; if (!A) return; abl.splice(k, 1); Sfx.deny(); toast('Ablauf ' + A.n + ' verworfen.', false, 1200); }
+  // Knöpfe der bereiten Abläufe über dem Showdown-Knopf
+  let ablKey = '';
+  function renderAbl() {
+    const show = mode === 'play' && !sd && abl.length;
+    const key = show ? abl.map(A => A.n + ':' + A.sd.map(l => l.length).join(',')).join('|') + (run.status === 'play') : '';
+    if (key === ablKey) return;
+    ablKey = key;
+    $('#abl').innerHTML = show ? abl.map((A, k) => {
+      const who = A.sd.map((l, ci) => l.length ? `<i style="background:${R.LOOK[run.crew[ci].id].av}">${run.crew[ci].name[0]}</i>` : '').join('');
+      return `<div class="ab" data-ab="${k}"><button class="go" data-abgo="${k}" aria-label="Ablauf ${A.n} starten"><b>▶ ${A.n}</b><span>${who}</span></button><button class="x" data-abx="${k}" aria-label="Ablauf ${A.n} verwerfen">${ICON.x}</button></div>`;
+    }).join('') : '';
+  }
+  {
+    let hold = null;
+    const el = $('#abl');
+    el.addEventListener('pointerdown', (e) => {
+      const b = e.target.closest('[data-abgo]'); if (!b) return;
+      const k = +b.dataset.abgo; clearTimeout(hold && hold.t);
+      hold = { k, done: false, t: setTimeout(() => { hold.done = true; editAbl(k); }, 480) };
+    });
+    const cancel = () => { if (hold) clearTimeout(hold.t); };
+    el.addEventListener('pointerleave', cancel); el.addEventListener('pointercancel', cancel);
+    el.addEventListener('click', (e) => {
+      Sfx.init();
+      const x = e.target.closest('[data-abx]'); if (x) { dropAbl(+x.dataset.abx); return; }
+      const b = e.target.closest('[data-abgo]'); if (!b) return;
+      if (hold) clearTimeout(hold.t);
+      if (hold && hold.done) { hold = null; return; }
+      hold = null; startAbl(+b.dataset.abgo);
+    });
+    el.addEventListener('contextmenu', (e) => { const b = e.target.closest('[data-abgo]'); if (!b) return; e.preventDefault(); if (hold) clearTimeout(hold.t); hold = null; editAbl(+b.dataset.abgo); });
+  }
 
   /* ---------- Ereignisse ---------- */
   function handleEvents() {
@@ -5370,6 +5468,7 @@ else window.LEVEL = LEVEL;
     while (rewindBuf.length && rewindBuf[rewindBuf.length - 1].t > run.t) rewindBuf.pop();
     lastSnapT = run.t; rewinds++; aim = null; closeRing(); fx.ripples.length = 0; fx.fields.length = 0; fx.flash = 0; slowUntil = 0; clearTimeout(resultTimer);
     sd = JSON.parse(lastPlan.sd); sdCont = lastPlan.cont.slice(); lastPlan.endT = null;
+    abl = lastPlan.abl ? JSON.parse(lastPlan.abl) : abl; ablEditN = lastPlan.n || 0;
     sdSel = -1; sdUndo = []; preview = null; previewKey = ''; scrubT = -1;
     if (run.crew[sel].caught) sel = run.crew.findIndex(c => !c.caught);
     setMode('play'); Sfx.sd();
@@ -5398,6 +5497,8 @@ else window.LEVEL = LEVEL;
     else if (k === 's' || k === 'f5') { e.preventDefault(); $('#btn-save').click(); }
     else if (k === 'l' || k === 'f9') { e.preventDefault(); $('#btn-load').click(); }
     else if (/^[1-4]$/.test(k) && run.crew[+k - 1]) select(+k - 1);
+    else if (/^[5-8]$/.test(k)) { const i = abl.findIndex(A => A.n === +k - 4); if (i >= 0) startAbl(i); }
+    else if (k === 'b') act('park');
     else if (k === 'tab') { e.preventDefault(); select((sel + 1) % run.crew.length); }
     else if (k === 'q') act('coin');
     else if (k === 'w') act('whistle');
@@ -5461,7 +5562,7 @@ else window.LEVEL = LEVEL;
     requestAnimationFrame(frame);
   }
   if (window.__debug) window.__dbg_aim = () => aim;
-  if (window.__debug) window.__dbg = { get know() { return know; }, shown, fogOn, dropOn, thingAt, rewind, get rewindBuf() { return rewindBuf; }, get slowUntil() { return slowUntil; }, get dragPreview() { return dragPreview; }, get run() { return run; }, cam, clampCam, setMode, get mode() { return mode; }, onTap, toScreen, select, get sd() { return sd; }, prefs, get ring() { return ring; }, get preview() { return preview; }, get lastPlan() { return lastPlan; }, backToPlan, get sdCont() { return sdCont; }, get sdSel() { return sdSel; }, set scrub(v) { scrubT = v; syncScrub(); }, freeze(v) { dbgFrozen = v !== false; }, tick(n) { for (let i = 0; i < n && run.status === 'play'; i++) { run.step(); if (run.events.length) handleEvents(); } }, audio: () => ({ state: Sfx.ac && Sfx.ac.state, music: !!Music.out, stage: Music.stage, beat: Music.beat, muffled: Music.muffled }) };
+  if (window.__debug) window.__dbg = { get abl() { return abl; }, parkPlan, startAbl, editAbl, get know() { return know; }, shown, fogOn, dropOn, thingAt, rewind, get rewindBuf() { return rewindBuf; }, get slowUntil() { return slowUntil; }, get dragPreview() { return dragPreview; }, get run() { return run; }, cam, clampCam, setMode, get mode() { return mode; }, onTap, toScreen, select, get sd() { return sd; }, prefs, get ring() { return ring; }, get preview() { return preview; }, get lastPlan() { return lastPlan; }, backToPlan, get sdCont() { return sdCont; }, get sdSel() { return sdSel; }, set scrub(v) { scrubT = v; syncScrub(); }, freeze(v) { dbgFrozen = v !== false; }, tick(n) { for (let i = 0; i < n && run.status === 'play'; i++) { run.step(); if (run.events.length) handleEvents(); } }, audio: () => ({ state: Sfx.ac && Sfx.ac.state, music: !!Music.out, stage: Music.stage, beat: Music.beat, muffled: Music.muffled }) };
   introCards(); newRun(); syncPause();
   requestAnimationFrame((t) => { last = t; frame(t); });
 })();
