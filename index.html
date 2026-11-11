@@ -523,6 +523,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       <button class="btn" id="btn-music">Musik: an</button>
       <button class="btn" id="btn-help">Steuerung ansehen</button>
       <button class="btn" id="btn-restart">Neu starten</button>
+      <button class="btn" id="btn-menu">Hauptmenü: Level und Crew wählen</button>
     </div>
   </section>
 
@@ -539,6 +540,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       <button class="btn" id="btn-rw10">10 Sekunden zurückspulen</button>
       <button class="btn" id="btn-res-load">Letzten Spielstand laden</button>
       <button class="btn" id="btn-res-again">Neu starten</button>
+      <button class="btn" id="btn-res-menu">Hauptmenü</button>
     </div>
   </section>
 </div>
@@ -5425,6 +5427,10 @@ else window.LEVEL = LEVEL;
   $('#btn-resume').addEventListener('click', () => setMode('play'));
   $('#btn-restart').addEventListener('click', () => { newRun(); setMode('play'); });
   $('#btn-help').addEventListener('click', () => { introFromPause = true; $('#btn-start').textContent = 'Weiter'; setMode('intro'); });
+  // Zurück ins Hauptmenü: Level und Crew neu wählen. Der laufende Coup wird beim nächsten Start verworfen.
+  function toMenu() { introFromPause = false; sd = null; aim = null; clearTimeout(resultTimer); introCards(); setMode('intro'); Sfx.tap(); }
+  $('#btn-menu').addEventListener('click', toMenu);
+  $('#btn-res-menu').addEventListener('click', toMenu);
   $('#btn-tempo').addEventListener('click', () => { prefs.tempo = TEMPOS[(TEMPOS.indexOf(prefs.tempo) + 1) % TEMPOS.length]; savePrefs(); syncPause(); });
   $('#btn-sound').addEventListener('click', () => { prefs.sound = !prefs.sound; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); Music.sync(); });
   $('#btn-music').addEventListener('click', () => { prefs.music = !prefs.music; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); Music.sync(); });
