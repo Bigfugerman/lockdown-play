@@ -357,6 +357,8 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
 #app.ov .act svg { width: 20px; height: 20px; }
 #app.ov .act span { max-width: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #app.ov .act kbd { display: none; }
+#app.ov.fine .act { position: relative; }
+#app.ov.fine .act kbd { display: block; position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; margin: 0; padding: 0 4px; border-radius: 6px; border: 0; font: 700 10px/18px var(--mono); background: rgba(238,243,250,.92); color: #05090f; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,.45); }
 
 /* Planschritte im Showdown: schmale Leiste über den Figuren */
 #app.ov #plan { position: absolute; left: calc(env(safe-area-inset-left) + 10px); right: calc(env(safe-area-inset-right) + 98px); bottom: calc(env(safe-area-inset-bottom) + 76px);
@@ -438,6 +440,30 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
 #abl .x { width: 30px; border-radius: 6px 20px 20px 6px; border: 1px solid rgba(255,255,255,.18); background: rgba(5,9,18,.82); color: #c9d3df; cursor: pointer; display: grid; place-items: center; padding: 0; }
 #abl .x svg { width: 12px; height: 12px; }
 #app.left #abl { right: auto; left: calc(env(safe-area-inset-left) + 10px); }
+
+/* ---------- PC-Steuerung (4.4): Tasten an Karten, Gruppe, Speicher-Alter, Tastenübersicht ---------- */
+.me, .mate { position: relative; }
+kbd.ck { position: absolute; top: -7px; left: -5px; z-index: 1; min-width: 16px; height: 16px; margin: 0; padding: 0 3px; border: 0; border-radius: 5px; font: 700 10px/16px var(--mono); background: rgba(238,243,250,.92); color: #05090f; text-align: center; }
+#app.ov .me.grp { border-style: dashed; }
+#app.ov .mate.grp { border: 2px dashed rgba(238,243,250,.9); }
+.mate.grp { border: 2px dashed rgba(238,243,250,.9); }
+#btn-save { position: relative; }
+#save-age { position: absolute; left: 50%; top: 100%; margin-top: 1px; transform: translateX(-50%); font: 700 9px/1.2 var(--mono); color: var(--muted); white-space: nowrap; pointer-events: none; text-shadow: 0 1px 3px #000; }
+#save-age[data-old="1"] { color: var(--amber); }
+#save-age[data-old="2"] { color: #ff8a7d; }
+#keys { position: fixed; inset: 0; z-index: 30; overflow-y: auto; padding: 16px 18px 0; background: var(--ink); color: var(--paper); }
+#keys[hidden] { display: none; }
+#keys .kh { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+#keys .kh strong { font-size: 18px; letter-spacing: .04em; }
+#keys .kh small { color: var(--muted); font-size: 12px; }
+#keys .kg { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px 26px; margin: 14px 0 12px; }
+#keys h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--amber); }
+#keys .kr { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.07); font-size: 12px; }
+#keys .kb { flex: none; min-width: 70px; padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.06); color: var(--paper); font: 700 11px var(--mono); cursor: pointer; }
+#keys .kb:hover { border-color: var(--amber); }
+#keys .kr.fix b { flex: none; font: 700 11px var(--mono); color: var(--muted); }
+#keys .kf { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 10px; padding: 10px 0 14px; background: linear-gradient(rgba(7,11,20,0), var(--ink) 35%); }
+#keys .kf .btn { width: auto; flex: none; min-width: 180px; }
 </style>
 </head>
 <body>
@@ -445,7 +471,7 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
   <header id="hud">
     <span class="pill" id="stage-pill" data-s="0">Ruhig</span>
     <span id="goal"></span>
-    <button class="ibtn" id="btn-save" aria-label="Schnell speichern"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h9l3 3v11H4z" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="7" y="3" width="6" height="4" fill="currentColor"/><rect x="7" y="11" width="6" height="5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>
+    <button class="ibtn" id="btn-save" aria-label="Schnell speichern"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h9l3 3v11H4z" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="7" y="3" width="6" height="4" fill="currentColor"/><rect x="7" y="11" width="6" height="5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span id="save-age" aria-hidden="true">0:00</span></button>
     <button class="ibtn" id="btn-load" aria-label="Schnell laden" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9M6 8l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 14v3h12v-3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
     <button class="ibtn" id="btn-fs" aria-label="Vollbild" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <button class="ibtn" id="btn-pause" aria-label="Pause"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5" y="4" width="3.5" height="12" fill="currentColor"/><rect x="11.5" y="4" width="3.5" height="12" fill="currentColor"/></svg></button>
@@ -486,10 +512,9 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
         <li><b>Figur ziehen</b><span>zeigt vorher die Fußspuren, rot = da sieht dich gerade jemand. Auf ein Ziel ziehen = das Naheliegende (betäuben, tragen, knacken, klettern). Zurück auf die Figur = abbrechen.</span></li>
         <li><b>Showdown</b><span>Zeit steht. Für jede Figur beliebig viele Schritte planen: Wege, Rennen (doppelt tippen), Warten, Betäuben und danach Fesseln oder Tragen. Die Karte zeigt eure Pläne mit Zeiten, der Regler zeigt, wo eure Leute wann stehen. Was die Wachen tun, musst du selbst einschätzen. Signale stimmen Figuren ab (eine gibt ⚑A, die andere wartet darauf). Wird eine Figur entdeckt, stoppt ihr Plan (pro Figur umstellbar). Schritt antippen = markieren und ändern, Wegpunkte ziehen, Zurück. LOS startet alles gleichzeitig. Geht etwas schief: „Plan“ bringt dich zurück vor LOS, der Plan ist noch da. „Später“ statt LOS legt den Plan als Ablauf bereit und die Zeit läuft weiter: ▶ 1 bis ▶ 4 über dem Showdown-Knopf startet ihn im richtigen Moment, gedrückt halten ändert ihn.</span></li>
         <li><b>Wischen / 2 Finger</b><span>Karte verschieben / zoomen</span></li>
+        <li><b>Zweimal auf einen Kopf</b><span>beide zusammen auswählen: Boden antippen schickt alle hin, nebeneinander. Aktionen macht die Figur in der Hand.</span></li>
       </ul>
-      <ul class="keys" id="pc-keys" hidden>
-        <li><b>PC</b><span>Linksklick wie Antippen · Doppelklick oder Rechtsklick auf den Boden = hinrennen · Rechtsklick aufs Ziel = Naheliegendes sofort · Maus über Wache = ihre Runde · 1/2 oder Tab = Figur · Leertaste = Showdown/LOS · Q Münze · W Pfiff · E Ablegen · R Warten · F Signal · U Zurück · P zum letzten Plan · B Später (Ablauf bereitlegen) · 5–8 Ablauf 1–4 starten · I Profil · Z zurückspulen · S/L Speichern/Laden</span></li>
-      </ul>
+      <ul class="keys" id="pc-keys" hidden></ul>
       <p class="note">Lichtkegel: Im hellen vorderen Teil sieht man dich immer. Im gestreiften Teil nur aufrecht, geduckt nicht. Betäubte wachen nach 45 s auf und schlagen Alarm, also fesseln. Speichern oft.</p>
       <button class="btn primary" id="btn-start">Coup starten</button>
       <button class="btn" id="btn-brief">Briefing ansehen</button>
@@ -516,16 +541,20 @@ kbd { font-family: var(--mono); font-size: 9px; padding: 1px 4px; border-radius:
       <button class="btn" id="btn-hold">Zeit steht beim Zielen: an</button>
       <button class="btn" id="btn-reflex">Reflex-Zeitlupe: an</button>
       <button class="btn" id="btn-hard">Schwer: nur Gesehenes zeigen: aus</button>
-      <p class="note">Im Anwesen siehst du Wachen nur, wenn deine Leute sie sehen. Wer das zu schwer findet, schaltet hier alle sichtbar.</p>
+      <p class="note">An: Du siehst Wachen nur, wenn deine Leute sie sehen. Spähen geht dann durchs Schlüsselloch, Schritte hinter Wänden hörst du als Kringel. Für Profis.</p>
       <button class="btn" id="btn-strict">Entdeckt = Ende: aus</button>
       <p class="note">Aus: Wer entdeckt wird, kann noch fliehen, sich verstecken oder den Verfolger von hinten ausschalten. Vorbei ist es erst, wenn eine Wache dich packt. An: Jeder Blickkontakt beendet den Coup.</p>
       <button class="btn" id="btn-sound">Ton: an</button>
       <button class="btn" id="btn-music">Musik: an</button>
+      <button class="btn" id="btn-keys" hidden>Tasten und Maus (F1), neu belegen</button>
+      <button class="btn" id="btn-edge" hidden>Karte am Bildschirmrand scrollen: an</button>
       <button class="btn" id="btn-help">Steuerung ansehen</button>
       <button class="btn" id="btn-restart">Neu starten</button>
       <button class="btn" id="btn-menu">Hauptmenü: Level und Crew wählen</button>
     </div>
   </section>
+
+  <div id="keys" hidden role="dialog" aria-label="Tasten und Maus"></div>
 
   <section class="screen" id="scr-result">
     <div class="stack" id="res-stack">
@@ -3251,7 +3280,7 @@ else window.LEVEL = LEVEL;
   /* ---------- Einstellungen ---------- */
   const KEY = 'lockdown.p1';
   const TEMPOS = [0.5, 0.7, 0.85, 1];
-  const prefs = { tempo: 0.7, sound: true, music: true, briefed: false, seen: [], hardSight: false, tips: [], strict: false, reflex: !(window.matchMedia && matchMedia('(pointer: fine)').matches), hold: true, left: false, crew: ['leo', 'mara'], level: null };
+  const prefs = { tempo: 0.7, sound: true, music: true, briefed: false, seen: [], hardSight: false, edge: true, binds: {}, tips: [], strict: false, reflex: !(window.matchMedia && matchMedia('(pointer: fine)').matches), hold: true, left: false, crew: ['leo', 'mara'], level: null };
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
     if (TEMPOS.includes(s.tempo)) prefs.tempo = s.tempo;
@@ -3265,6 +3294,8 @@ else window.LEVEL = LEVEL;
     if (typeof s.left === 'boolean') prefs.left = s.left;
     if (Array.isArray(s.crew) && s.crew.length === 2 && s.crew.every(id => LEVEL.crew.some(c => c.id === id))) prefs.crew = s.crew;
     if (typeof s.hardSight === 'boolean') prefs.hardSight = s.hardSight;
+    if (typeof s.edge === 'boolean') prefs.edge = s.edge;
+    if (s.binds && typeof s.binds === 'object') for (const [k, v] of Object.entries(s.binds)) if (Array.isArray(v) && v.every(x => typeof x === 'string')) prefs.binds[k] = v;
     if (Array.isArray(s.seen)) prefs.seen = s.seen.filter(t => typeof t === 'string');
     if (LEVELS.some(l => l.id === s.level)) prefs.level = s.level;
   } catch (e) { /* ohne Speicher */ }
@@ -3392,6 +3423,8 @@ else window.LEVEL = LEVEL;
 
   /* ---------- Zustand ---------- */
   let run = null, quick = null, mode = 'intro', sel = 0, aim = null, sd = null, resultTimer = 0, introFromPause = false;
+  let group = new Set([0]);   // Gruppe (4.4): Figur in der Hand (sel) plus Mitläufer
+  let savedT = 0, overviewPrev = null, ffOn = false, boxSel = null;
   let ring = null;        // Ziel des Aktionsrads: {kind:'guard'|'body'|'door'|'vent', g, x, y}
   let tipOpen = false, nearTipChecked = false;
   const cam = { x: 8.5, y: 20, z: 36, init: false };
@@ -3507,7 +3540,7 @@ else window.LEVEL = LEVEL;
 
   function newRun() {
     ACTIVE = Object.assign({}, LEVEL, { crew: LEVEL.crew.filter(c => prefs.crew.includes(c.id)) });
-    run = new C.Run(ACTIVE); run.strict = prefs.strict; know = []; abl = []; ablEditN = 0; quick = null; sel = 0; aim = null; sd = null; ring = null; routeShow = null;
+    run = new C.Run(ACTIVE); run.strict = prefs.strict; know = []; abl = []; ablEditN = 0; quick = null; sel = 0; group = new Set([0]); savedT = 0; overviewPrev = null; aim = null; sd = null; ring = null; routeShow = null;
     rewindBuf = []; lastSnapT = -1e9; rewinds = 0; slowUntil = 0; nearTipChecked = false; lastPlan = null;
     fx.ripples.length = 0; fx.fields.length = 0; fx.flash = 0;
     $('#btn-load').disabled = true;
@@ -3708,6 +3741,25 @@ else window.LEVEL = LEVEL;
     });
     return out;
   }
+  /* ---------- Hervorheben (4.4, H halten) ----------
+     Wie „Hervorheben“ in Shadow Tactics: Türen, Fenster, Schächte, Verstecke, Sicherung, Radio, Vitrine, Bilder, Kittel.
+     Hilft vor allem in 2,5D, wo Möbel und Wände Dinge verdecken. */
+  const HL_KINDS = new Set(['locked', 'door', 'window', 'vent', 'bush', 'closet', 'plant', 'fuse', 'radio', 'case', 'gap', 'ivy', 'manhole', 'grate']);
+  let hlCache = null, hlKey = '';
+  const hlOn = () => mode === 'play' && down('highlight');
+  function drawHighlight(g, P, now) {
+    const lv = run.lv;
+    if (hlKey !== lv.id + lv.W + 'x' + lv.H) {
+      hlKey = lv.id + lv.W + 'x' + lv.H; hlCache = [];
+      for (let y = 0; y < lv.H; y++) for (let x = 0; x < lv.W; x++) if (HL_KINDS.has(C.kindAt(lv, x, y))) hlCache.push([x, y]);
+    }
+    const a = .55 + .3 * Math.sin(now / 200);
+    g.lineWidth = 2 * P; g.strokeStyle = rgba('#ffd36b', a); g.fillStyle = rgba('#ffd36b', .12);
+    const box = (x, y) => { g.fillRect(x + .06, y + .06, .88, .88); g.strokeRect(x + .06, y + .06, .88, .88); };
+    for (const [x, y] of hlCache) box(x, y);
+    lv.loot.forEach((L, i) => { if (!run.loot.includes(i)) box(L.wall[0], L.wall[1]); });
+    run.outfits.forEach(o => box(o.at[0], o.at[1]));
+  }
   function drawEdgeArrows(g, now) {
     edgeArrows = [];
     if (mode !== 'play' || run.status !== 'play') return;
@@ -3865,6 +3917,7 @@ else window.LEVEL = LEVEL;
         g.fillStyle = '#eef3fa'; g.strokeStyle = '#0b0f18'; g.lineWidth = 2 * P;
         g.beginPath(); g.moveTo(c.x - .17, by - .16); g.lineTo(c.x + .17, by - .16); g.lineTo(c.x, by + .06); g.closePath(); g.fill(); g.stroke();
       }
+      if (i !== sel && group.has(i) && mode === 'play' && !c.caught) { g.strokeStyle = rgba('#eef3fa', .5 + .3 * pulse); g.lineWidth = 2.2 * P; g.setLineDash([.16, .1]); circle(g, c.x, c.y, .47); g.stroke(); g.setLineDash([]); }
       g.strokeStyle = rgba(lk.av, i === sel ? .95 : .6); g.lineWidth = (i === sel ? 2.5 : 1.5) * P; circle(g, c.x, c.y, .38); g.stroke();
       if (c.caught) return;
       const po = c.busy ? R.busyPose(c.busy, run.t, c.tool === 'brecheisen' && !c.busy.bolt) : null;
@@ -3956,8 +4009,13 @@ else window.LEVEL = LEVEL;
       aimPt = aimPt0;
       worldTransform(g);
     }
+    if (hlOn()) drawHighlight(g, P, now);
     // Bildschirm-Ebene: Symbole über Köpfen, Nummern der Planschritte
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (boxSel) {
+      const x = Math.min(boxSel.x0, boxSel.x1), y = Math.min(boxSel.y0, boxSel.y1), w = Math.abs(boxSel.x1 - boxSel.x0), h = Math.abs(boxSel.y1 - boxSel.y0);
+      g.fillStyle = 'rgba(238,243,250,.08)'; g.fillRect(x, y, w, h); g.strokeStyle = 'rgba(238,243,250,.75)'; g.lineWidth = 1.5; g.setLineDash([6, 4]); g.strokeRect(x, y, w, h); g.setLineDash([]);
+    }
     run.gs.forEach((G, i) => { if (G.active && shown(i)) drawStatus(g, G, i); else if (G.active && !G.down) ghostTag(g, i); });
     run.crew.forEach((c, i) => drawCrewTag(g, c, i));
     drawEdgeArrows(g, now);
@@ -4020,6 +4078,7 @@ else window.LEVEL = LEVEL;
       g.font = font(12); g.textAlign = 'center'; g.textBaseline = 'top'; g.fillStyle = `rgba(255,214,210,${a})`;
       g.fillText('ZEITLUPE', vw / 2, 44);
     }
+    if (ffOn) { g.font = font(12); g.textAlign = 'center'; g.textBaseline = 'top'; g.fillStyle = 'rgba(255,211,107,.95)'; g.fillText('ZEITRAFFER ×3', vw / 2, 44); }
   }
 
   function chainFromOrder(ci, list) {
@@ -4577,23 +4636,26 @@ else window.LEVEL = LEVEL;
     const nL = run.lv.loot.length, lootTxt = nL ? ` · Gemälde ${run.loot.length}/${nL}` : '';
     const goal = (run.item.taken ? `<b>Alle zum Wagen</b> · ${atExit}/${run.crew.length} dort` : `Ziel: <b>${LEVEL.item}</b> ${LEVEL.where || 'in der Galerie'}`) + lootTxt;
     if ($('#goal').innerHTML !== goal) $('#goal').innerHTML = goal;
-    const ck = run.crew.map((c, i) => [i === sel, c.caught, statusOf(c, i), c.ties, c.coins, !!(c.busy || c.order || c.queue.length), c.hidden].join()).join('|') + (sd ? 'sd' : '');
+    const ck = run.crew.map((c, i) => [i === sel, group.has(i), c.caught, statusOf(c, i), c.ties, c.coins, !!(c.busy || c.order || c.queue.length), c.hidden].join()).join('|') + (sd ? 'sd' : '') + keysRev;
     if (ck !== crewKey) {
       crewKey = ck;
       const me = run.crew[sel], lk = R.LOOK[me.id];
       const res = [];
       if (ACTIVE.crew[sel].coins) res.push('◎ ' + me.coins);
       res.push('⛓ ' + me.ties);
-      let html = `<button class="me" data-c="${sel}" aria-label="${me.name} ist ausgewählt. Gedrückt halten für das Profil."><span class="av" style="background:${lk.av}">${me.name[0]}</span><span class="mi"><strong>${me.name}</strong><small>${statusOf(me, sel)}</small><small class="cap">${capsOf(me)}</small></span><span class="res">${res.join('<br>')}</span></button>`;
+      const kb = (i) => finePointer ? `<kbd class="ck">${i + 1}</kbd>` : '';
+      let html = `<button class="me${group.size > 1 ? ' grp' : ''}" data-c="${sel}" aria-label="${me.name} ist ausgewählt${group.size > 1 ? ', Gruppe mit ' + (group.size - 1) + ' weiteren' : ''}. Gedrückt halten für das Profil.">${kb(sel)}<span class="av" style="background:${lk.av}">${me.name[0]}</span><span class="mi"><strong>${me.name}</strong><small>${statusOf(me, sel)}</small><small class="cap">${capsOf(me)}</small></span><span class="res">${res.join('<br>')}</span></button>`;
       run.crew.forEach((c, i) => {
         if (i === sel) return;
         const l2 = R.LOOK[c.id];
         const dot = c.caught ? '#ff4a3d' : c.busy || c.order || c.queue.length || (sd && sd[i].length) ? '#6fb6ff' : c.hidden ? '#58e0a0' : '';
-        html += `<button class="mate${c.caught ? ' caught' : ''}" data-c="${i}" aria-label="${c.name} übernehmen"><span class="av" style="background:${l2.av}">${c.name[0]}</span><small>${c.name}</small>${dot ? `<span class="dot" style="background:${dot}"></span>` : ''}</button>`;
+        html += `<button class="mate${c.caught ? ' caught' : ''}${group.has(i) ? ' grp' : ''}" data-c="${i}" aria-label="${c.name} übernehmen${group.has(i) ? ' (in der Gruppe)' : ''}">${kb(i)}<span class="av" style="background:${l2.av}">${c.name[0]}</span><small>${c.name}</small>${dot ? `<span class="dot" style="background:${dot}"></span>` : ''}</button>`;
       });
       $('#crew').innerHTML = html;
     }
     renderPlan(); renderActs(); renderAbl();
+    { const age = Math.max(0, run.t - savedT), sec = Math.floor(age / rate()), txt = fmt(age), el = $('#save-age');
+      if (el.textContent !== txt) { el.textContent = txt; el.dataset.old = sec >= 60 ? (sec >= 180 ? '2' : '1') : '0'; $('#btn-save').title = (quick ? 'Zuletzt gespeichert vor ' : 'Noch nicht gespeichert, gespielt seit ') + txt + ' (' + keyName('save') + ')'; } }
     const lab = !sd ? 'Show&shy;down' : !preview ? 'Los' : preview.warn ? 'Los<small class="warn">⚠ ' + secs(preview.warn.t) + '</small>' : 'Los<small class="ok">' + secs(preview.end) + '</small>';
     if ($('#sdlabel').innerHTML !== lab) $('#sdlabel').innerHTML = lab;
     app.classList.toggle('sd', !!sd);
@@ -4719,11 +4781,10 @@ else window.LEVEL = LEVEL;
       if (!sd && lastPlan && (lastPlan.endT == null || run.t - lastPlan.endT < rate() * 10)) list.push(['replan', ICON.undo, 'Plan', false]);
       if (sd) list.push(['undo', ICON.undo, 'Zurück', !sdUndo.length]);
     }
-    const key = list.map(a => a.join()).join('|');
+    const key = list.map(a => a.join()).join('|') + keysRev;
     if (key === actsKey) return;
     actsKey = key;
-    const KEYS = { coin: 'Q', whistle: 'W', drop: 'E', wait: 'R', undo: 'U', signal: 'F', replan: 'P', park: 'B' };
-    $('#acts').innerHTML = list.map(([id, ic, label, dis, on, cls]) => `<button class="act${on ? ' on' : ''}${cls ? ' ' + cls : ''}" data-a="${id}" aria-label="${label}"${dis ? ' disabled' : ''}>${ic}<span>${label}</span>${finePointer && KEYS[id] ? `<kbd>${KEYS[id]}</kbd>` : ''}</button>`).join('');
+    $('#acts').innerHTML = list.map(([id, ic, label, dis, on, cls]) => { const k = ACT_KEY[id] ? keyName(ACT_KEY[id]) : ''; return `<button class="act${on ? ' on' : ''}${cls ? ' ' + cls : ''}" data-a="${id}" aria-label="${label}"${finePointer && k ? ` title="${label} (${k})"` : ''}${dis ? ' disabled' : ''}>${ic}<span>${label}</span>${finePointer && k ? `<kbd>${k}</kbd>` : ''}</button>`; }).join('');
   }
 
   function toast(text, bad, ms) {
@@ -4759,7 +4820,7 @@ else window.LEVEL = LEVEL;
 
   /* ---------- Befehle ---------- */
   const issue = (o) => issueAs(sel, o);
-  function issueAs(ci, o) {
+  function issueAs(ci, o, quiet) {
     const c = run.crew[ci];
     if (sd) {
       // Plan prüfen, so gut es vorab geht
@@ -4777,28 +4838,101 @@ else window.LEVEL = LEVEL;
       const at = insertAt(ci);
       sd[ci].splice(at, 0, o); Sfx.tap();
       if (ci === sel && sdSel >= 0) sdSel = at;
-      if (ci !== sel) toast(c.name + ' übernimmt: ' + describe(o) + ' (eingeplant).', false, 1600);
-      return true;
+      if (ci !== sel && !quiet) toast(c.name + ' übernimmt: ' + describe(o) + ' (eingeplant).', false, 1600);
+      return o;
     }
     const r = run.order(ci, o);
     if (!r.ok) { if (r.why) toast(r.why, true); Sfx.deny(); return false; }
     Sfx.tap();
-    if (ci !== sel) toast(c.name + ' übernimmt: ' + describe(o) + '. Du steuerst weiter ' + run.crew[sel].name + '.', false, 2000);
+    if (ci !== sel && !quiet) toast(c.name + ' übernimmt: ' + describe(o) + '. Du steuerst weiter ' + run.crew[sel].name + '.', false, 2000);
     if (o.type === 'move' && ++moveCount === 3) tip('drag', finePointer
       ? 'Profi-Tipp: Zieh eine Figur mit der Maus auf ein Ziel. Vorher siehst du die Fußspuren – rot heißt: Da sieht dich gerade jemand. Rechtsklick macht das Naheliegende sofort, auf dem Boden heißt das hinrennen.'
       : 'Profi-Tipp: Zieh eine Figur mit dem Finger. Vorher siehst du die Fußspuren – rot heißt: Da sieht dich gerade jemand. Loslassen = los, zurück auf die Figur = abbrechen.');
     if (o.type === 'move') { ripple(o.x + .5, o.y + .5, c.run ? '#ffc35c' : '#eef3fa', .1, .45, 380); tip('gait', finePointer ? 'Einmal klicken = hinschleichen, geduckt und leise. Doppelklick = hinrennen: schnell, aber aufrecht und laut. Die Schallwellen zeigen, wie weit man dich hört.' : 'Einmal tippen = hinschleichen, geduckt und leise. Doppelt tippen = hinrennen: schnell, aber aufrecht und laut. Die Schallwellen zeigen, wie weit man dich hört.'); }
     return true;
   }
-  function select(i) {
-    if (run.crew[i].caught) return;
+  // add (Shift): Figur zur Gruppe dazu oder aus ihr heraus. Ohne add: nur diese Figur.
+  function select(i, add) {
+    if (!run.crew[i] || run.crew[i].caught) return;
     closeRing();
-    if (sel === i && !sd) focus(run.crew[i]);
+    if (add) {
+      if (group.has(i)) { if (group.size < 2) return; group.delete(i); if (sel === i) { sel = [...group][0]; sdSel = -1; } Sfx.tap(); }
+      else { group.add(i); Sfx.sel(); groupTip(); }
+      return;
+    }
+    if (sel === i && group.size === 1 && !sd) focus(run.crew[i]);
     if (sel !== i) sdSel = -1;
-    sel = i; aim = null; Sfx.sel();
+    sel = i; group = new Set([i]); aim = null; Sfx.sel();
+  }
+  /* ---------- Gruppe (4.4) ----------
+     Wie bei den Vorbildern: Laufen macht die ganze Gruppe, nebeneinander statt übereinander. Aktionen (betäuben, knacken, Münze)
+     macht nur die Figur in der Hand, der weiße Pfeil. */
+  const members = () => [sel, ...[...group].filter(i => i !== sel && run.crew[i] && !run.crew[i].caught)];
+  // Neue Gruppe. Die Figur in der Hand bleibt, wenn sie dabei ist, sonst übernimmt die erste.
+  function setGroup(list) {
+    const ok = list.filter(i => run.crew[i] && !run.crew[i].caught);
+    if (!ok.length) return;
+    group = new Set(ok); closeRing(); aim = null;
+    if (!group.has(sel)) { sel = ok[0]; sdSel = -1; }
+    Sfx.sel(); groupTip();
+  }
+  function groupTip() {
+    if (group.size < 2) return;
+    tip('group', finePointer ? 'Gruppe: Klick auf den Boden schickt alle hin, nebeneinander. Aktionen wie Betäuben oder Knacken macht die Figur in der Hand (weißer Pfeil). Shift+Klick nimmt Figuren dazu oder weg, ein Klick auf eine Figur nimmt nur sie.'
+      : 'Gruppe: Boden antippen schickt alle hin, nebeneinander. Aktionen wie Betäuben oder Knacken macht die Figur in der Hand (weißer Pfeil). Einmal auf einen Kopf tippen nimmt nur diese Figur.');
+  }
+  // Ziele für die Gruppe: Die Figur in der Hand nimmt das Feld, die anderen behalten ihre Lage (höchstens 2 Felder) oder nehmen das nächste freie Feld.
+  // Gesucht wird nur auf normalem Boden vom Ziel aus, damit niemand hinter einer Wand oder durch ein Fenster landet.
+  const PLAIN = (k) => !C.TUNNEL.has(k) && !['window', 'gap', 'ivy', 'manhole', 'grate'].includes(k);
+  function groupTargets(tx, ty) {
+    const lv = run.lv, ms = members(), lead = posOf(sel), taken = new Set(), out = [];
+    for (const ci of ms) {
+      const c = run.crew[ci], p = posOf(ci);
+      const want = ci === sel ? [tx, ty] : [tx + Math.max(-2, Math.min(2, Math.round(p[0] - lead[0]))), ty + Math.max(-2, Math.min(2, Math.round(p[1] - lead[1])))];
+      const free = (x, y) => !taken.has(y * lv.W + x) && C.crewWalkable(lv, x, y, c, run);
+      let best = null;
+      if (ci === sel && free(tx, ty)) best = [tx, ty];
+      else {
+        // Ring für Ring vom Ziel aus über begehbaren Boden, höchstens 4 Schritte
+        const seen = new Set([ty * lv.W + tx]), q = [[tx, ty, 0]]; let bd = Infinity;
+        while (q.length) {
+          const [x, y, d] = q.shift();
+          if (free(x, y) && PLAIN(C.kindAt(lv, x, y))) { const dd = Math.hypot(x - want[0], y - want[1]) + d * .3; if (dd < bd) { bd = dd; best = [x, y]; } }
+          if (d >= 4) continue;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+            const nx = x + dx, ny = y + dy, k = ny * lv.W + nx;
+            if (nx < 0 || ny < 0 || nx >= lv.W || ny >= lv.H || seen.has(k)) continue;
+            seen.add(k);
+            if (C.crewWalkable(lv, nx, ny, c, run) && PLAIN(C.kindAt(lv, nx, ny))) q.push([nx, ny, d + 1]);
+          }
+        }
+      }
+      if (!best) best = [tx, ty];
+      taken.add(best[1] * lv.W + best[0]); out.push([ci, best]);
+    }
+    return out;
+  }
+  let lastGroupMove = null;
+  function moveTo(tx, ty, runF) {
+    const ms = members();
+    if (ms.length < 2) return issue({ type: 'move', x: tx, y: ty, run: runF });
+    const steps = [];
+    for (const [ci, [x, y]] of groupTargets(tx, ty)) { const o = { type: 'move', x, y, run: runF }; if (issueAs(ci, o, true)) steps.push(o); }
+    lastGroupMove = { tx, ty, t: performance.now(), steps };
+    return steps.length > 0;
+  }
+  function toggleGait() {
+    const c = run.crew[sel], g = c.gait === 'run' ? 'sneak' : 'run';
+    members().forEach(ci => run.setGait(ci, g)); Sfx.tap();
+    toast(g === 'run' ? (group.size > 1 ? 'Alle rennen' : c.name + ' rennt') + ': schnell, aufrecht, laut.' : (group.size > 1 ? 'Alle schleichen' : c.name + ' schleicht') + ': geduckt und leise.', false, 1600);
+  }
+  function stopGroup() {
+    if (sd) return;
+    members().forEach(ci => { const c = run.crew[ci]; if (c.order || c.queue.length || c.move) run.order(ci, { type: 'move', x: c.move ? c.move.to[0] : c.tile[0], y: c.move ? c.move.to[1] : c.tile[1] }); });
+    Sfx.deny();
   }
 
-  function onTap(sx, sy) {
+  function onTap(sx, sy, shift) {
     if (mode !== 'play' || run.status !== 'play' || tipOpen) return;
     Sfx.init();
     const ea = !aim && edgeArrows.find(a => Math.hypot(a.x - sx, a.y - sy) < 24);
@@ -4817,7 +4951,9 @@ else window.LEVEL = LEVEL;
     // eigene Leute
     let best = -1, bd = .55;
     run.crew.forEach((c, i) => { if (c.caught) return; const d = Math.hypot(c.x - wx, c.y - wy); if (d < bd) { bd = d; best = i; } });
+    if (best >= 0 && shift) { select(best, true); return; }
     if (best >= 0 && best !== sel) { select(best); return; }
+    if (best === sel && group.size > 1) { select(best); return; }
     if (best === sel && !sd) { focus(run.crew[sel]); return; }
     // Wachen, Bewusstlose, Türen, Schacht: Aktionsrad statt Sofortbefehl
     let gi = -1; bd = .6;
@@ -4844,10 +4980,15 @@ else window.LEVEL = LEVEL;
     const dbl = lastTap && lastTap.ci === sel && now - lastTap.t < 380 && Math.hypot(sx - lastTap.sx, sy - lastTap.sy) < 40;
     lastTap = dbl ? null : { t: now, sx, sy, ci: sel };
     if (dbl) { runTo(tx, ty); return; }
-    issue({ type: 'move', x: tx, y: ty, run: false });
+    moveTo(tx, ty, false);
   }
   let lastTap = null;
   function runTo(tx, ty) {
+    if (members().length > 1) {
+      // Doppelklick mit Gruppe: im Showdown die eben geplanten Wege auf Rennen stellen, sonst alle rennen hin
+      if (sd && lastGroupMove && lastGroupMove.tx === tx && lastGroupMove.ty === ty && performance.now() - lastGroupMove.t < 800) { lastGroupMove.steps.forEach(o => { o.run = true; }); Sfx.tap(); planKey = ''; return; }
+      moveTo(tx, ty, true); return;
+    }
     if (sd) {
       const list = sd[sel], k = insertAt(sel) - 1, last = list[k];
       if (last && last.type === 'move' && last.x === tx && last.y === ty) { last.run = true; Sfx.tap(); planKey = ''; return; }
@@ -4936,7 +5077,7 @@ else window.LEVEL = LEVEL;
       const ok = mode === 'play' && run.status === 'play' && !tipOpen && !aim;
       const ci = ok ? crewAt(e.offsetX, e.offsetY) : -1;
       const wp = ok && ci < 0 && sd ? waypointAt(e.offsetX, e.offsetY) : -1;
-      gesture = ci >= 0 ? { type: 'tap', crew: ci } : wp >= 0 ? { type: 'tap', wp } : { type: 'tap' };
+      gesture = ci >= 0 ? { type: 'tap', crew: ci } : wp >= 0 ? { type: 'tap', wp } : { type: 'tap', box: ok && e.pointerType === 'mouse' };
     }
     else if (ptrs.size === 2) {
       const [a, b] = [...ptrs.values()];
@@ -4948,11 +5089,13 @@ else window.LEVEL = LEVEL;
     const px = p.x, py = p.y; p.x = e.offsetX; p.y = e.offsetY;
     if (gesture.type === 'aim') { aimPt = [p.x, p.y]; return; }
     if (gesture.type === 'tap' && Math.hypot(p.x - p.sx, p.y - p.sy) > 10) {
-      gesture.type = gesture.crew != null ? 'drag' : gesture.wp != null ? 'wp' : 'pan';
+      gesture.type = gesture.crew != null ? 'drag' : gesture.wp != null ? 'wp' : gesture.box ? 'box' : 'pan';
+      if (gesture.type === 'box') { closeRing(); boxSel = { x0: p.sx, y0: p.sy, x1: p.x, y1: p.y }; }
       if (gesture.type === 'drag') closeRing();
       if (gesture.type === 'wp') { closeRing(); sdPush(); sdSel = gesture.wp; }
     }
     if (gesture.type === 'drag') { gesture.x = p.x; gesture.y = p.y; return; }
+    if (gesture.type === 'box') { boxSel.x1 = p.x; boxSel.y1 = p.y; return; }
     if (gesture.type === 'wp') { moveWaypoint(gesture.wp, p.x, p.y); return; }
     if (gesture.type === 'pan' && ptrs.size === 1) { cam.x -= (p.x - px) / cam.z; cam.y -= (p.y - py) / cam.z; clampCam(); }
     if (gesture.type === 'pinch' && ptrs.size === 2) {
@@ -4966,39 +5109,82 @@ else window.LEVEL = LEVEL;
     const p = ptrs.get(e.pointerId);
     if (p && gesture && gesture.type === 'aim' && ptrs.size === 1) { onTap(p.x, p.y); aimPt = null; }
     else if (p && gesture && gesture.type === 'tap' && gesture.wp != null && ptrs.size === 1) { sdSel = gesture.wp; Sfx.sel(); }
-    else if (p && gesture && gesture.type === 'tap' && ptrs.size === 1) onTap(p.x, p.y);
+    else if (p && gesture && gesture.type === 'tap' && ptrs.size === 1) onTap(p.x, p.y, e.shiftKey);
+    if (p && gesture && gesture.type === 'box' && ptrs.size === 1) { finishBox(e.shiftKey); }
     if (p && gesture && gesture.type === 'drag' && ptrs.size === 1) { Sfx.init(); dropOn(gesture.crew, p.x, p.y); }
     ptrs.delete(e.pointerId);
     if (ptrs.size === 0) gesture = null;
     else if (gesture && gesture.type === 'pinch') gesture = { type: 'none' };
   };
   cv.addEventListener('pointerup', up);
-  cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); if (!ptrs.size) gesture = null; });
-  // PC: Rechtsklick = naheliegende Aktion für die Figur in der Hand (Boden: hinrennen)
-  cv.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
+  cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); if (!ptrs.size) { gesture = null; boxSel = null; } });
+  // Rechteck aufziehen (PC): Figuren darin wählen, Shift nimmt sie dazu
+  function finishBox(shift) {
+    const b = boxSel; boxSel = null; if (!b) return;
+    const x0 = Math.min(b.x0, b.x1), x1 = Math.max(b.x0, b.x1), y0 = Math.min(b.y0, b.y1), y1 = Math.max(b.y0, b.y1);
+    const hit = [];
+    run.crew.forEach((c, i) => { if (c.caught) return; const [sx, sy] = toScreen(c.x, c.y); if (sx >= x0 - 8 && sx <= x1 + 8 && sy >= y0 - 12 && sy <= y1 + 8) hit.push(i); });
+    if (!hit.length) return;
+    setGroup(shift ? [...new Set([...group, ...hit])] : hit);
+  }
+  // PC: Rechtsklick = naheliegende Aktion für die Figur in der Hand (Boden: hinrennen, mit Gruppe alle). Beim Zielen: abbrechen.
+  function rightClick(sx, sy) {
     if (mode !== 'play' || run.status !== 'play' || tipOpen) return;
-    Sfx.init(); closeRing();
-    const t = thingAt(e.offsetX, e.offsetY);
-    if (t.kind === 'ground') issue({ type: 'move', x: t.x, y: t.y, run: true });
-    else dropOn(sel, e.offsetX, e.offsetY);
+    Sfx.init();
+    if (aim) { aim = null; aimTile = null; aimPt = null; Sfx.deny(); return; }
+    closeRing();
+    const t = thingAt(sx, sy);
+    if (t.kind === 'ground') moveTo(t.x, t.y, true);
+    else dropOn(sel, sx, sy);
+  }
+  // Mittlere oder rechte Maustaste ziehen = Karte schieben. Rechts ohne Ziehen = Rechtsklick (Desperados, Shadow Tactics)
+  let mpan = null;
+  cv.addEventListener('contextmenu', (e) => e.preventDefault());
+  cv.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });   // kein Auto-Scrollen des Browsers
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' || (e.button !== 1 && e.button !== 2)) return;
+    try { cv.setPointerCapture(e.pointerId); } catch (er) { /* egal */ }
+    mpan = { b: e.button, sx: e.offsetX, sy: e.offsetY, x: e.offsetX, y: e.offsetY, moved: false };
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (!mpan || e.pointerType !== 'mouse') return;
+    if (!mpan.moved && Math.hypot(e.offsetX - mpan.sx, e.offsetY - mpan.sy) > 6) { mpan.moved = true; cv.style.cursor = 'grabbing'; }
+    if (mpan.moved) { camGlide = null; overviewPrev = null; cam.x -= (e.offsetX - mpan.x) / cam.z; cam.y -= (e.offsetY - mpan.y) / cam.z; clampCam(); }
+    mpan.x = e.offsetX; mpan.y = e.offsetY;
+  });
+  cv.addEventListener('pointerup', (e) => {
+    if (!mpan || e.pointerType !== 'mouse' || e.button !== mpan.b) return;
+    const m = mpan; mpan = null;
+    if (m.b === 2 && !m.moved) rightClick(e.offsetX, e.offsetY);
   });
   // PC: Maus über einer Wache zeigt ihre Runde
   cv.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'mouse' && aim === 'coin') aimPt = [e.offsetX, e.offsetY];
     if (e.pointerType !== 'mouse' || ptrs.size || mode !== 'play') return;
     const t = thingAt(e.offsetX, e.offsetY);
-    cv.style.cursor = t.kind === 'ground' ? 'crosshair' : 'pointer';
+    cv.style.cursor = mpan && mpan.moved ? 'grabbing' : t.kind === 'ground' ? 'crosshair' : 'pointer';
     if (t.kind === 'guard') routeShow = { g: t.g, until: performance.now() + 700 };
   });
   cv.addEventListener('wheel', (e) => {
     e.preventDefault();
     const w = toWorld(e.offsetX, e.offsetY);
-    cam.z *= Math.exp(-e.deltaY * .0015); clampCam();
+    cam.z *= Math.exp(-e.deltaY * .0015); clampCam(); overviewPrev = null;
     camGlide = null; cam.x = w[0] - (e.offsetX - vw / 2) / cam.z; cam.y = w[1] - (e.offsetY - vh / 2) / cam.z; clampCam();
   }, { passive: false });
 
-  $('#crew').addEventListener('click', (e) => { if (pressFired) { pressFired = false; return; } const b = e.target.closest('[data-c]'); if (b && mode === 'play' && !tipOpen) select(+b.dataset.c); });
+  let lastCard = null;
+  $('#crew').addEventListener('click', (e) => {
+    if (pressFired) { pressFired = false; return; }
+    const b = e.target.closest('[data-c]'); if (!b || mode !== 'play' || tipOpen) return;
+    const i = +b.dataset.c, now = performance.now(), touch = e.pointerType === 'touch' || e.pointerType === 'pen' || !finePointer;
+    const again = lastCard && lastCard.i === i && now - lastCard.t < 380;
+    if (e.shiftKey) { select(i, true); lastCard = null; return; }
+    // Doppeltipp (Finger): beide zusammen. Nach dem ersten Tipp tauschen die Köpfe den Platz, deshalb zählt auch der getauschte Kopf.
+    if (touch && lastCard && now - lastCard.t < 380 && lastCard.prev !== lastCard.i && (i === lastCard.i || i === lastCard.prev)) { const keep = lastCard.i; setGroup([lastCard.prev, lastCard.i]); sel = keep; lastCard = null; return; }
+    if (again && !touch) { camGlide = { x: run.crew[i].x, y: run.crew[i].y }; lastCard = null; return; }      // Doppelklick: Kamera hin
+    lastCard = { i, t: now, prev: sel };
+    select(i);
+  });
   $('#plan').addEventListener('click', (e) => {
     if (!sd) return;
     if (e.target.closest('[data-opt]')) {
@@ -5497,6 +5683,9 @@ else window.LEVEL = LEVEL;
   $('#btn-hold').addEventListener('click', () => { prefs.hold = !prefs.hold; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
   $('#btn-reflex').addEventListener('click', () => { prefs.reflex = !prefs.reflex; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
   $('#btn-hard').addEventListener('click', () => { prefs.hardSight = !prefs.hardSight; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
+  $('#btn-edge').addEventListener('click', () => { prefs.edge = !prefs.edge; savePrefs(); syncPause(); Sfx.init(); Sfx.tap(); });
+  $('#btn-keys').addEventListener('click', () => { Sfx.init(); Sfx.tap(); openKeys(); });
+  if (finePointer) { $('#btn-keys').hidden = false; $('#btn-edge').hidden = false; }
   $('#btn-strict').addEventListener('click', () => { prefs.strict = !prefs.strict; savePrefs(); if (run) run.strict = prefs.strict; syncPause(); Sfx.init(); Sfx.tap(); });
   function syncPause() {
     $('#btn-tempo').textContent = 'Tempo: ' + Math.round(prefs.tempo * 100) + ' %';
@@ -5505,6 +5694,7 @@ else window.LEVEL = LEVEL;
     $('#btn-strict').textContent = 'Entdeckt = Ende: ' + (prefs.strict ? 'an' : 'aus');
     $('#btn-reflex').textContent = 'Reflex-Zeitlupe: ' + (prefs.reflex ? 'an' : 'aus');
     $('#btn-hard').textContent = 'Schwer: nur Gesehenes zeigen: ' + (prefs.hardSight ? 'an' : 'aus');
+    $('#btn-edge').textContent = 'Karte am Bildschirmrand scrollen: ' + (prefs.edge ? 'an' : 'aus');
     $('#btn-hold').textContent = 'Zeit steht beim Zielen: ' + (prefs.hold ? 'an' : 'aus');
     $('#btn-plan').style.display = lastPlan ? '' : 'none';
     $('#btn-left').textContent = 'Steuerung: ' + (prefs.left ? 'links (Linkshänder)' : 'rechts');
@@ -5512,7 +5702,7 @@ else window.LEVEL = LEVEL;
   }
   $('#btn-save').addEventListener('click', () => {
     if (mode !== 'play' || run.status !== 'play') return;
-    quick = run.snapshot(); $('#btn-load').disabled = false; Sfx.init(); Sfx.tap(); toast('Gespeichert.', false, 1000);
+    quick = run.snapshot(); savedT = run.t; $('#btn-load').disabled = false; Sfx.init(); Sfx.tap(); toast('Gespeichert.', false, 1000);
   });
   function rewind(sec) {
     const target = run.t - sec * rate();
@@ -5555,27 +5745,209 @@ else window.LEVEL = LEVEL;
   $('#btn-res-load').addEventListener('click', loadQuick);
   $('#btn-res-again').addEventListener('click', () => { newRun(); setMode('play'); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') { sd = null; setMode('paused'); syncPause(); } });
-  window.addEventListener('keydown', (e) => {
-    if (mode !== 'play') return;
-    const k = e.key.toLowerCase(), act = (id) => { const b = document.querySelector('[data-a="' + id + '"]'); if (b && !b.disabled) b.click(); };
-    if (k === ' ') { e.preventDefault(); $('#sdbtn').click(); }
-    else if (k === 's' || k === 'f5') { e.preventDefault(); $('#btn-save').click(); }
-    else if (k === 'l' || k === 'f9') { e.preventDefault(); $('#btn-load').click(); }
-    else if (/^[1-4]$/.test(k) && run.crew[+k - 1]) select(+k - 1);
-    else if (/^[5-8]$/.test(k)) { const i = abl.findIndex(A => A.n === +k - 4); if (i >= 0) startAbl(i); }
-    else if (k === 'b') act('park');
-    else if (k === 'tab') { e.preventDefault(); select((sel + 1) % run.crew.length); }
-    else if (k === 'q') act('coin');
-    else if (k === 'w') act('whistle');
-    else if (k === 'e') act('drop');
-    else if (k === 'r') act('wait');
-    else if (k === 'u') act('undo');
-    else if (k === 'f') act('signal');
-    else if (k === 'i') { if ($('#profile').hidden) showProfile(sel); else $('#profile').hidden = true; }
-    else if (k === 'p') { if (lastPlan) backToPlan(); }
-    else if (k === 'z') rewind(5);
-    else if (k === 'escape') { aim = null; closeRing(); }
+  /* ---------- Tastatur (4.4) ----------
+     Das Beste aus dem Genre: WASD/Pfeile schieben die Karte (Shift schneller), Aktionen liegen um WASD herum,
+     Enter = LOS und Shift für den Plan wie in Shadow Tactics, H = alles hervorheben, F5/F9 speichern/laden, jede Taste neu belegbar (Shadow Gambit).
+     Belegt wird nach der Lage der Taste (e.code), damit WASD auf jeder Tastatur links liegt. Merk-Tasten (P = Plan, Z = zurückspulen)
+     werden über das Tastatur-Layout gesucht, angezeigt wird, was auf der Taste steht. */
+  const KEYDEF = [
+    ['camUp', 'Kamera', 'Karte nach oben', ['KeyW', 'ArrowUp']],
+    ['camLeft', 'Kamera', 'Karte nach links', ['KeyA', 'ArrowLeft']],
+    ['camDown', 'Kamera', 'Karte nach unten', ['KeyS', 'ArrowDown']],
+    ['camRight', 'Kamera', 'Karte nach rechts', ['KeyD', 'ArrowRight']],
+    ['zoomIn', 'Kamera', 'Heranzoomen', ['@+', 'NumpadAdd']],
+    ['zoomOut', 'Kamera', 'Herauszoomen', ['@-', 'NumpadSubtract']],
+    ['overview', 'Kamera', 'Ganze Karte / zurück', ['@m']],
+    ['home', 'Kamera', 'Kamera zur Figur in der Hand', ['Home']],
+    ['next', 'Auswahl', 'Nächste Figur', ['Tab']],
+    ['ability', 'Aktionen', 'Fähigkeit der Figur (Münze, Pfiff)', ['KeyQ']],
+    ['gait', 'Aktionen', 'Schleichen / aufrecht (ganze Gruppe)', ['KeyC']],
+    ['stop', 'Aktionen', 'Anhalten (ganze Gruppe)', ['KeyX']],
+    ['drop', 'Aktionen', 'Getragenen ablegen', ['KeyR']],
+    ['undress', 'Aktionen', 'Kittel ausziehen', ['@k']],
+    ['showdown', 'Showdown', 'Showdown an / LOS', ['Space']],
+    ['go', 'Showdown', 'LOS', ['Enter', 'NumpadEnter']],
+    ['wait', 'Showdown', '+1 s warten', ['KeyT']],
+    ['signal', 'Showdown', 'Signal setzen', ['KeyF']],
+    ['park', 'Showdown', 'Später: als Ablauf bereitlegen', ['@b']],
+    ['undo', 'Showdown', 'Zurück (letzte Änderung)', ['@u']],
+    ['del', 'Showdown', 'Markierten Schritt löschen', ['Delete', 'Backspace']],
+    ['replan', 'Zeit', 'Zurück zum letzten Plan', ['@p']],
+    ['rewind', 'Zeit', '5 s zurückspulen (mit Shift 10 s)', ['@z']],
+    ['fast', 'Zeit', 'Zeitraffer ×3 (gedrückt halten)', ['KeyG']],
+    ['save', 'Zeit', 'Schnell speichern', ['F5']],
+    ['load', 'Zeit', 'Schnell laden', ['F9']],
+    ['highlight', 'Ansicht', 'Alles Interaktive zeigen (gedrückt halten)', ['@h']],
+    ['profile', 'Ansicht', 'Profil der Figur', ['@i']],
+    ['help', 'Ansicht', 'Tasten und Maus', ['F1']],
+    ['pause', 'Ansicht', 'Abbrechen / Pause', ['Escape']]
+  ];
+  // Feste Belegung, nicht änderbar (steht trotzdem in der Übersicht)
+  const KEYFIX = [
+    ['Auswahl', '1 – 4', 'Figur wählen, zweimal schnell: Kamera hin'],
+    ['Auswahl', 'Shift + 1 – 4', 'Figur zur Gruppe dazu oder weg'],
+    ['Auswahl', 'Strg + A', 'Alle wählen'],
+    ['Showdown', '5 – 8', 'Bereiten Ablauf 1 – 4 starten'],
+    ['Showdown', 'Strg + Z', 'Zurück (letzte Änderung)'],
+    ['Zeit', 'Strg + S', 'Schnell speichern'],
+    ['Maus', 'Linksklick', 'Figur wählen, Boden: hinschleichen, Ziel: Aktionsrad'],
+    ['Maus', 'Doppelklick', 'Boden: hinrennen (Gruppe: alle)'],
+    ['Maus', 'Rechtsklick', 'Boden: hinrennen, Ziel: das Naheliegende, beim Zielen: abbrechen'],
+    ['Maus', 'Links ziehen über Boden', 'Rechteck: Figuren darin wählen (Shift: dazu)'],
+    ['Maus', 'Shift + Klick', 'Figur zur Gruppe dazu oder weg'],
+    ['Maus', 'Figur ziehen', 'Fußspuren zeigen, loslassen = los'],
+    ['Maus', 'Rechts oder Mitte ziehen', 'Karte schieben'],
+    ['Maus', 'Mausrad', 'Zoomen'],
+    ['Maus', 'Bildschirmrand', 'Karte scrollt mit (in der Pause abschaltbar)'],
+    ['Maus', 'Maus über Wache', 'zeigt ihre Runde'],
+    ['Maus', 'Doppelklick auf Karte unten', 'Kamera zur Figur']
+  ];
+  const ACT_KEY = { coin: 'ability', whistle: 'ability', drop: 'drop', wait: 'wait', undo: 'undo', signal: 'signal', replan: 'replan', park: 'park', stop: 'stop', undress: 'undress' };
+  const CAM_SPEED = 900, EDGE_ZONE = 6;
+  const keysDown = new Set();
+  let layout = null, binds = {}, keyAct = new Map(), keysRev = 0, edgePt = null, rebinding = null;
+  const letterCode = (ch) => {
+    if (layout) for (const [code, v] of layout) if (v === ch && !/^Numpad/.test(code)) return code;
+    return ch === '+' ? 'Equal' : ch === '-' ? 'Minus' : 'Key' + ch.toUpperCase();
+  };
+  function resolveBinds() {
+    binds = {};
+    for (const [id, , , def] of KEYDEF) binds[id] = (prefs.binds[id] || def).map(k => k[0] === '@' ? letterCode(k.slice(1)) : k);
+    keyAct = new Map();
+    for (const [id] of KEYDEF) for (const code of binds[id]) if (!keyAct.has(code)) keyAct.set(code, id);
+    keysRev++;
+  }
+  const NAMES = { Space: 'Leertaste', Enter: 'Enter', NumpadEnter: 'Num Enter', Escape: 'Esc', Tab: 'Tab', Home: 'Pos1', End: 'Ende', Delete: 'Entf', Backspace: '⌫', Insert: 'Einfg',
+    ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ShiftLeft: 'Shift', ShiftRight: 'Shift', ControlLeft: 'Strg', ControlRight: 'Strg', AltLeft: 'Alt', AltRight: 'Alt Gr', CapsLock: 'Feststell',
+    NumpadAdd: 'Num +', NumpadSubtract: 'Num −', NumpadMultiply: 'Num *', NumpadDivide: 'Num /', PageUp: 'Bild ↑', PageDown: 'Bild ↓' };
+  function codeName(code) {
+    if (NAMES[code]) return NAMES[code];
+    if (layout && layout.get(code)) return layout.get(code).toUpperCase();
+    let m = /^Key([A-Z])$/.exec(code); if (m) return m[1];
+    m = /^Digit(\d)$/.exec(code); if (m) return m[1];
+    m = /^Numpad(\d)$/.exec(code); if (m) return 'Num ' + m[1];
+    return code;
+  }
+  const keyName = (id) => (binds[id] || []).map(codeName).join(' / ');
+  const down = (id) => !!binds[id] && binds[id].some(c => keysDown.has(c));
+  resolveBinds();
+  try { if (navigator.keyboard && navigator.keyboard.getLayoutMap) navigator.keyboard.getLayoutMap().then(m => { layout = m; resolveBinds(); renderPcKeys(); }).catch(() => {}); } catch (e) { /* ohne Layout */ }
+  // Maus am Bildschirmrand (für das Rand-Scrollen), über Knöpfen nicht
+  window.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    edgePt = x >= 0 && y >= 0 && x <= r.width && y <= r.height && !(e.target.closest && e.target.closest('button, input, #ring, #profile, #keys, .screen.on')) ? [x, y] : null;
   });
+  document.addEventListener('mouseleave', () => { edgePt = null; });
+  window.addEventListener('blur', () => { keysDown.clear(); edgePt = null; });
+  window.addEventListener('keyup', (e) => { keysDown.delete(e.code); if (e.key === 'Shift') { keysDown.delete('ShiftLeft'); keysDown.delete('ShiftRight'); } });
+  const act = (id) => { const b = document.querySelector('[data-a="' + id + '"]'); if (b && !b.disabled) { b.click(); return true; } return false; };
+  let lastNum = null;
+  const HOLD = new Set(['camUp', 'camLeft', 'camDown', 'camRight', 'fast', 'highlight']);
+  window.addEventListener('keydown', (e) => {
+    if (rebinding) { e.preventDefault(); finishRebind(e.code); return; }
+    if (e.target && e.target.closest && e.target.closest('input, textarea, select')) return;
+    if (!$('#keys').hidden) { if (e.code === 'Escape' || (binds.help || []).includes(e.code)) { e.preventDefault(); closeKeys(); } return; }
+    if (mode === 'paused' && e.code === 'Escape') { e.preventDefault(); $('#btn-resume').click(); return; }
+    if (mode !== 'play') return;
+    keysDown.add(e.code);
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl) {
+      if (e.code === letterCode('a')) { e.preventDefault(); setGroup(run.crew.map((c, i) => i)); }
+      else if (e.code === letterCode('z')) { e.preventDefault(); if (sd) act('undo'); }
+      else if (e.code === letterCode('s')) { e.preventDefault(); $('#btn-save').click(); }
+      return;
+    }
+    const dig = /^(?:Digit|Numpad)([1-8])$/.exec(e.code);
+    if (dig) {
+      e.preventDefault();
+      const n = +dig[1];
+      if (n >= 5) { const i = abl.findIndex(A => A.n === n - 4); if (i >= 0) startAbl(i); return; }
+      const ci = n - 1; if (!run.crew[ci]) return;
+      if (e.shiftKey) { select(ci, true); return; }
+      const now = performance.now();
+      if (lastNum && lastNum.n === n && now - lastNum.t < 350) { camGlide = { x: run.crew[ci].x, y: run.crew[ci].y }; lastNum = null; return; }
+      lastNum = { n, t: now };
+      if (sel !== ci || group.size > 1) select(ci);
+      return;
+    }
+    const id = keyAct.get(e.code); if (!id) return;
+    e.preventDefault();
+    if (e.repeat && !HOLD.has(id) && id !== 'zoomIn' && id !== 'zoomOut') return;
+    switch (id) {
+      case 'zoomIn': case 'zoomOut': cam.z *= id === 'zoomIn' ? 1.15 : 1 / 1.15; clampCam(); overviewPrev = null; break;
+      case 'overview': toggleOverview(); break;
+      case 'home': camGlide = { x: run.crew[sel].x, y: run.crew[sel].y }; break;
+      case 'next': { for (let k = 1; k <= run.crew.length; k++) { const i = (sel + k) % run.crew.length; if (!run.crew[i].caught) { select(i); break; } } break; }
+      case 'ability': act('coin') || act('whistle'); break;
+      case 'gait': if (!sd) toggleGait(); break;
+      case 'stop': stopGroup(); break;
+      case 'drop': act('drop'); break;
+      case 'undress': act('undress'); break;
+      case 'showdown': $('#sdbtn').click(); break;
+      case 'go': if (sd) $('#sdbtn').click(); break;
+      case 'wait': act('wait'); break;
+      case 'signal': act('signal'); break;
+      case 'park': act('park'); break;
+      case 'undo': act('undo'); break;
+      case 'del': { const bt = sd && sdSel >= 0 ? document.querySelector('#plan [data-rm="' + sdSel + '"]') : null; if (bt) bt.click(); else if (sd) act('undo'); break; }
+      case 'replan': if (lastPlan) backToPlan(); break;
+      case 'rewind': rewind(e.shiftKey ? 10 : 5); break;
+      case 'save': $('#btn-save').click(); break;
+      case 'load': $('#btn-load').click(); break;
+      case 'profile': if ($('#profile').hidden) showProfile(sel); else $('#profile').hidden = true; break;
+      case 'help': openKeys(); break;
+      case 'pause':
+        if (!$('#profile').hidden) $('#profile').hidden = true;
+        else if (aim || ring) { aim = null; aimTile = null; aimPt = null; closeRing(); }
+        else $('#btn-pause').click();
+        break;
+    }
+  });
+  // Ganze Karte und zurück (wie die Minikarte in Shadow Tactics, nur ohne zweites Bild)
+  function toggleOverview() {
+    if (overviewPrev) { const p = overviewPrev; overviewPrev = null; cam.z = p.z; camGlide = { x: p.x, y: p.y }; clampCam(); Sfx.tap(); return; }
+    overviewPrev = { x: cam.x, y: cam.y, z: cam.z }; camGlide = null; cam.z = minZ(); cam.x = run.lv.W / 2; cam.y = run.lv.H / 2; clampCam(); Sfx.tap();
+  }
+  /* Übersicht der Tasten (F1, Pause) mit Neubelegung: Taste anklicken, neue drücken. Esc bricht ab. */
+  function keysHtml() {
+    const groups = {};
+    for (const [id, gname, label] of KEYDEF) (groups[gname] = groups[gname] || []).push(`<div class="kr"><span>${label}</span><button class="kb" data-bind="${id}" aria-label="${label}: ${keyName(id)}. Klicken zum Ändern.">${rebinding === id ? 'Taste drücken …' : keyName(id)}</button></div>`);
+    for (const [gname, k, label] of KEYFIX) (groups[gname] = groups[gname] || []).push(`<div class="kr fix"><span>${label}</span><b>${k}</b></div>`);
+    return Object.entries(groups).map(([g, rows]) => `<section><h3>${g}</h3>${rows.join('')}</section>`).join('');
+  }
+  function openKeys() {
+    if (mode === 'play') $('#btn-pause').click();
+    $('#keys').innerHTML = `<div class="kh"><strong>Tasten und Maus</strong><small>Taste anklicken und neue drücken. Esc bricht ab.</small></div><div class="kg">${keysHtml()}</div><div class="kf"><button class="btn" id="keys-reset">Standard wiederherstellen</button><button class="btn primary" id="keys-ok">Fertig</button></div>`;
+    $('#keys').hidden = false;
+  }
+  function closeKeys() { rebinding = null; $('#keys').hidden = true; }
+  function finishRebind(code) {
+    const id = rebinding; rebinding = null;
+    if (code !== 'Escape' && id) {
+      // Belegte Taste wird woanders frei gemacht, damit eine Taste nie zwei Dinge tut
+      for (const [k] of KEYDEF) if (k !== id && binds[k].includes(code)) prefs.binds[k] = binds[k].filter(c => c !== code);
+      prefs.binds[id] = [code]; savePrefs(); resolveBinds(); renderPcKeys();
+    }
+    $('#keys .kg').innerHTML = keysHtml();
+  }
+  $('#keys').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-bind]');
+    if (b) { rebinding = b.dataset.bind; $('#keys .kg').innerHTML = keysHtml(); return; }
+    if (e.target.closest('#keys-reset')) { prefs.binds = {}; savePrefs(); resolveBinds(); renderPcKeys(); $('#keys .kg').innerHTML = keysHtml(); return; }
+    if (e.target.closest('#keys-ok')) closeKeys();
+  });
+  // Kurzfassung im Startbildschirm, aus derselben Belegung (keine zweite Liste), dazu Tooltips an den festen Knöpfen
+  function renderPcKeys() {
+    if (finePointer) {
+      $('#btn-load').title = 'Schnell laden (' + keyName('load') + ')'; $('#btn-pause').title = 'Pause (' + keyName('pause') + ')';
+      $('#sdbtn').title = 'Showdown: Zeit anhalten und planen (' + keyName('showdown') + '), LOS (' + keyName('go') + ')';
+    }
+    const el = $('#pc-keys'); if (!el) return;
+    const k = keyName;
+    el.innerHTML = `<li><b>PC</b><span>Kamera ${k('camUp')}/${k('camLeft')}/${k('camDown')}/${k('camRight')} (Shift schneller), Rand, rechts oder Mitte ziehen, Mausrad · ${k('overview')} ganze Karte · Rechteck ziehen oder Shift+Klick: Gruppe · Rechtsklick: hinrennen oder das Naheliegende · ${k('ability')} Fähigkeit · ${k('gait')} Gangart · ${k('stop')} Stopp · ${k('showdown')} Showdown, ${k('go')} LOS · ${k('highlight')} halten: alles zeigen · ${k('fast')} halten: Zeitraffer · ${k('save')}/${k('load')} Speichern/Laden · ${k('help')}: alle Tasten, jede neu belegbar</span></li>`;
+  }
+  renderPcKeys();
   new ResizeObserver(() => resize()).observe(stage);
 
   /* ---------- Hauptschleife ---------- */
@@ -5596,6 +5968,7 @@ else window.LEVEL = LEVEL;
     const dt = Math.min(.1, (now - last) / 1000); last = now;
     app.classList.toggle('hold', held());
     app.classList.toggle('left', !!prefs.left);
+    app.classList.toggle('fine', finePointer);
     app.classList.toggle('pv', !!(sd && preview));
     app.classList.toggle('ringon', !!ring);
     app.classList.toggle('briefing', mode === 'brief');
@@ -5605,7 +5978,8 @@ else window.LEVEL = LEVEL;
     if (mode === 'play' && !sd && !tipOpen && run.status === 'play' && !held() && !dbgFrozen) {
       // Reflex-Zeitlupe: kurz nach dem Entdecktwerden läuft die Zeit langsamer
       const left = slowUntil - now, slow = left > 0 ? (left > 400 ? .3 : .3 + .7 * (1 - left / 400)) : 1;
-      acc += dt * slow; const st = 1 / rate();
+      ffOn = down('fast') && slow === 1;
+      acc += dt * slow * (ffOn ? 3 : 1); const st = 1 / rate();
       while (acc >= st) {
         acc -= st; run.step();
         if (run.events.length) handleEvents();
@@ -5614,7 +5988,18 @@ else window.LEVEL = LEVEL;
       }
       checkNearTip();
       footsteps();
-    } else acc = 0;
+    } else { acc = 0; ffOn = false; }
+    // Kamera mit WASD/Pfeilen und am Bildschirmrand (PC)
+    if (mode === 'play' && !tipOpen && run) {
+      let kx = (down('camRight') ? 1 : 0) - (down('camLeft') ? 1 : 0), ky = (down('camDown') ? 1 : 0) - (down('camUp') ? 1 : 0);
+      if (prefs.edge && finePointer && edgePt && !ptrs.size && !mpan) {
+        const m = EDGE_ZONE; if (edgePt[0] <= m) kx = -1; else if (edgePt[0] >= vw - m) kx = 1; if (edgePt[1] <= m) ky = -1; else if (edgePt[1] >= vh - m) ky = 1;
+      }
+      if (kx || ky) {
+        const fast = keysDown.has('ShiftLeft') || keysDown.has('ShiftRight'), sp = CAM_SPEED * (fast ? 2.2 : 1) / cam.z, n = Math.hypot(kx, ky);
+        camGlide = null; overviewPrev = null; cam.x += kx / n * sp * dt; cam.y += ky / n * sp * dt; clampCam();
+      }
+    }
     // Beim Ziehen am Rand scrollt die Karte mit
     if (gesture && gesture.type === 'drag' && gesture.x != null) {
       const m = 46, ex = gesture.x < m ? -(m - gesture.x) / m : gesture.x > vw - m ? (gesture.x - (vw - m)) / m : 0;
@@ -5628,7 +6013,7 @@ else window.LEVEL = LEVEL;
     requestAnimationFrame(frame);
   }
   if (window.__debug) window.__dbg_aim = () => aim;
-  if (window.__debug) window.__dbg = { get abl() { return abl; }, parkPlan, startAbl, editAbl, get know() { return know; }, shown, fogOn, get edgeArrows() { return edgeArrows; }, get camGlide() { return camGlide; }, dropOn, thingAt, rewind, get rewindBuf() { return rewindBuf; }, get slowUntil() { return slowUntil; }, get dragPreview() { return dragPreview; }, get run() { return run; }, cam, clampCam, setMode, get mode() { return mode; }, onTap, toScreen, select, get sd() { return sd; }, prefs, get ring() { return ring; }, get preview() { return preview; }, get lastPlan() { return lastPlan; }, backToPlan, get sdCont() { return sdCont; }, get sdSel() { return sdSel; }, set scrub(v) { scrubT = v; syncScrub(); }, freeze(v) { dbgFrozen = v !== false; }, tick(n) { for (let i = 0; i < n && run.status === 'play'; i++) { run.step(); if (run.events.length) handleEvents(); } }, audio: () => ({ state: Sfx.ac && Sfx.ac.state, music: !!Music.out, stage: Music.stage, beat: Music.beat, muffled: Music.muffled }) };
+  if (window.__debug) window.__dbg = { get abl() { return abl; }, parkPlan, startAbl, editAbl, get know() { return know; }, shown, fogOn, get edgeArrows() { return edgeArrows; }, get camGlide() { return camGlide; }, get group() { return [...group]; }, setGroup, members, groupTargets, get binds() { return binds; }, keyName, get keysDown() { return keysDown; }, set edgePt(v) { edgePt = v; }, get ffOn() { return ffOn; }, get overviewPrev() { return overviewPrev; }, hlOn, get savedT() { return savedT; }, openKeys, dropOn, thingAt, rewind, get rewindBuf() { return rewindBuf; }, get slowUntil() { return slowUntil; }, get dragPreview() { return dragPreview; }, get run() { return run; }, cam, clampCam, setMode, get mode() { return mode; }, onTap, toScreen, select, get sd() { return sd; }, prefs, get ring() { return ring; }, get preview() { return preview; }, get lastPlan() { return lastPlan; }, backToPlan, get sdCont() { return sdCont; }, get sdSel() { return sdSel; }, set scrub(v) { scrubT = v; syncScrub(); }, freeze(v) { dbgFrozen = v !== false; }, tick(n) { for (let i = 0; i < n && run.status === 'play'; i++) { run.step(); if (run.events.length) handleEvents(); } }, audio: () => ({ state: Sfx.ac && Sfx.ac.state, music: !!Music.out, stage: Music.stage, beat: Music.beat, muffled: Music.muffled }) };
   introCards(); newRun(); syncPause();
   requestAnimationFrame((t) => { last = t; frame(t); });
 })();
